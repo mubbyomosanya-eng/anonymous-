@@ -33,11 +33,11 @@
   .card p.lead { color: var(--muted); }
   label { display: block; margin-bottom: 6px; font-weight: 600; }
   .field { display: flex; gap: 8px; }
-  input[type="text"] {
+  input[type="text"], input[type="email"], input[type="password"] {
     flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px;
     border: 1px solid var(--surface-2); background: var(--surface);
   }
-  input[type="text"]::placeholder { color: var(--muted); }
+  input::placeholder { color: var(--muted); }
   .hint { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
   .error { color: var(--danger); font-size: 0.9rem; min-height: 1.3em; }
   .btn {
@@ -88,6 +88,12 @@
   .counter { color: var(--muted); font-size: 0.75rem; padding: 0 14px 6px; background: var(--surface); text-align: right; }
   .counter.over { color: var(--danger); }
 
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .tab { padding: 10px 6px; border-radius: 10px; border: 1px solid var(--surface-2); background: var(--surface); cursor: pointer; font-size: .9rem; }
+  .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; text-align: left; font-size: .9rem; }
+  #older-btn { margin: 8px auto 0; font-size: .85rem; padding: 8px 14px; }
+
   @media (min-width: 720px) {
     #chat { max-width: 760px; margin: 0 auto; border-inline: 1px solid var(--surface-2); }
   }
@@ -100,20 +106,30 @@
 <main id="welcome" class="screen">
   <div class="card">
     <h1>Anonymous Chat</h1>
-    <p class="lead">One public room. No accounts, no history. You only see what's said while you're here.</p>
+    <p class="lead">One public room. Join as a guest or with an account. Recent messages are kept for everyone.</p>
 
     <form id="join-form" class="card" style="gap:12px" novalidate>
-      <div>
+      <div class="tabs" role="group" aria-label="How to join">
+        <button type="button" class="tab" data-mode="guest" aria-pressed="true">Guest</button>
+        <button type="button" class="tab" data-mode="signin" aria-pressed="false">Sign in</button>
+        <button type="button" class="tab" data-mode="signup" aria-pressed="false">Create account</button>
+      </div>
+      <div id="nick-field">
         <label for="nickname">Nickname</label>
         <div class="field">
           <input id="nickname" type="text" maxlength="24" autocomplete="off"
                  placeholder="2–24 characters" aria-describedby="nick-hint nick-error">
           <button type="button" id="random-btn" class="btn">Random</button>
         </div>
-        <p id="nick-hint" class="hint">Pick a name or generate one. Others will see it.</p>
-        <p id="nick-error" class="error" role="alert"></p>
+        <p id="nick-hint" class="hint">Pick a name or generate one. Nicknames are not unique.</p>
       </div>
-      <button type="submit" id="join-btn" class="btn primary">Join conversation</button>
+      <div id="account-fields" hidden style="display:grid; gap:12px">
+        <div><label for="email">Email</label><input id="email" type="email" autocomplete="email" style="width:100%"></div>
+        <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" style="width:100%"></div>
+        <button type="button" id="forgot-btn" class="link" hidden>Forgot password?</button>
+      </div>
+      <p id="nick-error" class="error" role="alert"></p>
+      <button type="submit" id="join-btn" class="btn primary">Join as guest</button>
     </form>
   </div>
 </main>
@@ -133,6 +149,7 @@
     </div>
   </header>
 
+  <button type="button" id="older-btn" class="btn" hidden>Load older messages</button>
   <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
     <p class="empty" id="empty-note">Nothing here yet. Messages sent after you joined will appear.</p>
   </div>
@@ -147,8 +164,8 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getDatabase, ref, onValue, push, set, query, orderByChild, startAt, onChildAdded, serverTimestamp }
+  import { getAuth, signInAnonymously, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, endBefore, get, onChildAdded, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
   // ---------- Firebase config (public by design; security lives in the database rules) ----------
@@ -212,8 +229,7 @@
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // Always textContent, never innerHTML, for user-supplied strings.
-  function renderMessage({ nick, text, ts, mine, state }) {
-    $('empty-note')?.remove();
+  function buildMessage({ nick, text, ts, mine, state }) {
     const wrap = document.createElement('div');
     wrap.className = 'msg ' + (mine ? 'mine' : 'theirs') + (state ? ' ' + state : '');
     const meta = document.createElement('div');
@@ -223,10 +239,15 @@
     bubble.className = 'bubble';
     bubble.textContent = text;
     wrap.append(meta, bubble);
+    return wrap;
+  }
 
+  function renderMessage(m) {
+    $('empty-note')?.remove();
+    const wrap = buildMessage(m);
     const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
     messagesEl.appendChild(wrap);
-    if (mine || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    if (m.mine || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
     return wrap;
   }
 
@@ -234,7 +255,7 @@
     messagesEl.replaceChildren();
     const note = document.createElement('p');
     note.className = 'empty'; note.id = 'empty-note';
-    note.textContent = 'Nothing here yet. Messages sent after you joined will appear.';
+    note.textContent = 'No messages yet. Say hello.';
     messagesEl.appendChild(note);
   }
 
@@ -257,76 +278,141 @@
   window.addEventListener('offline', () => { if (uid) setStatus('disconnected', 'Offline'); });
   window.addEventListener('online', () => { if (uid) setStatus('reconnecting', 'Reconnecting…'); });
 
-  // The client clock can be wrong. Ask Firebase how far off it is, so "joined at" uses server time.
-  function getServerOffset() {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout')), 8000);
-      onValue(ref(db, '.info/serverTimeOffset'), (s) => { clearTimeout(timer); resolve(s.val() || 0); }, { onlyOnce: true });
-    });
-  }
+  // ---------- History + live listener ----------
+  const PAGE = 50;
+  let oldest = null; // { ts, key } of the oldest message currently loaded
 
-  // ---------- Live-only listener ----------
-  // Only messages with ts >= join time. This is a display filter, not access control (see rules notes).
-  function listen(since) {
-    const q = query(ref(db, 'messages'), orderByChild('ts'), startAt(since));
+  function toView(snap) {
+    const v = snap.val() || {};
+    if (typeof v.text !== 'string' || typeof v.nick !== 'string') return null; // ignore malformed data
+    return { nick: v.nick.slice(0, NICK_MAX), text: v.text.slice(0, MSG_MAX), ts: Number(v.ts) || Date.now(), mine: v.uid === uid };
+  }
+  const track = (key, ts) => { if (!oldest || ts < oldest.ts) oldest = { ts, key }; };
+
+  // Last PAGE messages, then every new one. Older ones load on demand (bandwidth stays bounded).
+  function listen() {
+    const q = query(ref(db, 'messages'), orderByChild('ts'), limitToLast(PAGE));
     stopMessages = onChildAdded(q, (snap) => {
       const key = snap.key;
       if (els.has(key)) return;
-      const v = snap.val() || {};
-      if (typeof v.text !== 'string' || typeof v.nick !== 'string') return; // ignore malformed data
-      els.set(key, renderMessage({
-        nick: v.nick.slice(0, NICK_MAX),
-        text: v.text.slice(0, MSG_MAX),
-        ts: Number(v.ts) || Date.now(),
-        mine: v.uid === uid,
-        state: pending.has(key) ? 'pending' : ''
-      }));
+      const m = toView(snap);
+      if (!m) return;
+      track(key, m.ts);
+      els.set(key, renderMessage({ ...m, state: pending.has(key) ? 'pending' : '' }));
     }, () => setStatus('disconnected', 'Cannot read messages'));
+    $('older-btn').hidden = false;
   }
 
+  $('older-btn').addEventListener('click', async () => {
+    if (!oldest) return;
+    const btn = $('older-btn');
+    btn.disabled = true;
+    try {
+      const snap = await get(query(ref(db, 'messages'), orderByChild('ts'), endBefore(oldest.ts, oldest.key), limitToLast(PAGE)));
+      const items = [];
+      snap.forEach((c) => { const m = els.has(c.key) ? null : toView(c); if (m) items.push([c.key, m]); });
+      const prevH = messagesEl.scrollHeight;
+      const first = messagesEl.querySelector('.msg');
+      for (const [key, m] of items) {            // ascending order, each inserted before the first loaded message
+        const el = buildMessage(m);
+        messagesEl.insertBefore(el, first);
+        els.set(key, el);
+        track(key, m.ts);
+      }
+      messagesEl.scrollTop += messagesEl.scrollHeight - prevH; // keep the reader's place
+      if (snap.size < PAGE) btn.hidden = true;
+    } catch (err) {
+      console.error(err);
+      btn.textContent = 'Could not load. Tap to retry';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // ---------- Join ----------
+  const LABELS = { guest: 'Join as guest', signin: 'Sign in', signup: 'Create account' };
+  let mode = 'guest';
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    $('account-fields').hidden = m === 'guest';
+    $('nick-field').hidden = m === 'signin';
+    $('forgot-btn').hidden = m !== 'signin';
+    $('password').autocomplete = m === 'signup' ? 'new-password' : 'current-password';
+    $('join-btn').textContent = LABELS[m];
+    nickError.textContent = '';
+  }
+  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
   function setJoining(on) {
     joining = on;
     $('join-btn').disabled = on;
-    $('join-btn').textContent = on ? 'Joining…' : 'Join conversation';
+    $('join-btn').textContent = on ? 'Please wait…' : LABELS[mode];
   }
 
   function joinErrorMessage(err) {
     console.error(err);
     const map = {
-      'auth/operation-not-allowed': 'Anonymous sign-in is not enabled in Firebase Authentication.',
+      'auth/operation-not-allowed': 'This sign-in method is not enabled in Firebase Authentication.',
       'auth/unauthorized-domain': "This website's domain is not listed in Firebase Authorized domains.",
       'auth/network-request-failed': 'Network error. Check your connection and try again.',
-      'auth/too-many-requests': 'Too many attempts. Try again later.'
+      'auth/too-many-requests': 'Too many attempts. Try again later.',
+      'auth/invalid-credential': 'Wrong email or password.',
+      'auth/invalid-email': 'That email address is not valid.',
+      'auth/email-already-in-use': 'That email already has an account. Use Sign in.',
+      'auth/weak-password': 'Password must be at least 6 characters.',
+      'auth/missing-password': 'Enter your password.'
     };
-    if (map[err.code]) return map[err.code];
-    if (err.message === 'timeout') return 'Could not reach the server. Try again.';
-    return 'Could not join. Try again.';
+    return map[err.code] || 'Could not join. Try again.';
   }
 
   $('join-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (joining) return;
-    const result = validateNickname(nickInput.value);
-    if (result.error) { nickError.textContent = result.error; nickInput.focus(); return; }
     if (!configured) { nickError.textContent = 'Firebase is not configured.'; return; }
+    let nick = null;
+    if (mode !== 'signin') {
+      const r = validateNickname(nickInput.value);
+      if (r.error) { nickError.textContent = r.error; nickInput.focus(); return; }
+      nick = r.value;
+    }
+    const email = $('email').value.trim(), password = $('password').value;
+    if (mode !== 'guest' && (!email || !password)) { nickError.textContent = 'Enter your email and password.'; return; }
     nickError.textContent = '';
     setJoining(true);
     try {
-      const cred = await signInAnonymously(auth);
-      const offset = await getServerOffset();
-      uid = cred.user.uid;
-      nickname = result.value;
+      let user;
+      if (mode === 'guest') {
+        user = (await signInAnonymously(auth)).user;
+      } else if (mode === 'signup') {
+        user = (await createUserWithEmailAndPassword(auth, email, password)).user;
+        await updateProfile(user, { displayName: nick });   // the account's nickname lives in the Auth profile
+      } else {
+        user = (await signInWithEmailAndPassword(auth, email, password)).user;
+        nick = (user.displayName || email.split('@')[0] || 'user').slice(0, NICK_MAX).padEnd(NICK_MIN, '_');
+      }
+      uid = user.uid;
+      nickname = nick;
       $('me-name').textContent = nickname;
       showScreen('chat');
       watchConnection();
-      listen(Date.now() + offset);
+      listen();
     } catch (err) {
       nickError.textContent = joinErrorMessage(err);
       if (auth.currentUser) signOut(auth).catch(() => {});
     } finally {
       setJoining(false);
     }
+  });
+
+  $('forgot-btn').addEventListener('click', async () => {
+    const email = $('email').value.trim();
+    if (!email) { nickError.textContent = 'Enter your email first.'; return; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      nickError.textContent = 'If an account exists for that email, a reset link was sent.';
+    } catch (err) { nickError.textContent = joinErrorMessage(err); }
   });
 
   // ---------- Send ----------
@@ -374,8 +460,9 @@
   $('leave-btn').addEventListener('click', async () => {
     stopMessages?.(); stopMessages = null;
     stopConnWatch?.(); stopConnWatch = null;
-    uid = null;
+    uid = null; oldest = null;
     els.clear(); pending.clear();
+    $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
     resetMessages();
     showScreen('welcome');
     if (auth) await signOut(auth).catch(() => {});
