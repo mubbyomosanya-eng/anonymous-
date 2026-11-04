@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<title>Anonymous Chat</title>
+<style>
+  :root {
+    --bg: #161819;
+    --surface: #1f2224;
+    --surface-2: #2a2e31;
+    --text: #e8eaea;
+    --muted: #9aa3a6;
+    --accent: #5cb88a;
+    --accent-ink: #0d1a13;
+    --danger: #e5726b;
+    --radius: 16px;
+    --app-h: 100dvh; /* overwritten by JS when the keyboard opens */
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .screen { height: var(--app-h); display: flex; flex-direction: column; }
+
+  /* ---------- Welcome ---------- */
+  #welcome { align-items: center; justify-content: center; padding: 24px; }
+  .card { width: 100%; max-width: 420px; display: grid; gap: 16px; }
+  .card h1 { font-size: 1.9rem; letter-spacing: -0.02em; }
+  .card p.lead { color: var(--muted); }
+  label { display: block; margin-bottom: 6px; font-weight: 600; }
+  .field { display: flex; gap: 8px; }
+  input[type="text"] {
+    flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--surface-2); background: var(--surface);
+  }
+  input[type="text"]::placeholder { color: var(--muted); }
+  .hint { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+  .error { color: var(--danger); font-size: 0.9rem; min-height: 1.3em; }
+  .btn {
+    padding: 12px 16px; border-radius: 12px; border: 1px solid var(--surface-2);
+    background: var(--surface); cursor: pointer; transition: background .15s, opacity .15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--surface-2); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: #6cc99a; }
+
+  /* ---------- Chat ---------- */
+  header.bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--surface-2);
+  }
+  .bar h2 { font-size: 1.05rem; }
+  .bar .sub { color: var(--muted); font-size: 0.8rem; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status[data-state="connected"] .dot { background: var(--accent); }
+  .status[data-state="connecting"] .dot,
+  .status[data-state="reconnecting"] .dot { background: #d9b45a; }
+  .status[data-state="disconnected"] .dot { background: var(--danger); }
+
+  #messages {
+    flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 10px;
+    overscroll-behavior: contain;
+  }
+  .empty { margin: auto; color: var(--muted); text-align: center; max-width: 30ch; }
+  .msg { max-width: min(78%, 520px); display: flex; flex-direction: column; gap: 2px; }
+  .msg .meta { font-size: 0.75rem; color: var(--muted); padding: 0 6px; }
+  .msg .bubble {
+    padding: 9px 13px; border-radius: var(--radius); background: var(--surface-2);
+    overflow-wrap: anywhere; white-space: pre-wrap;
+  }
+  .msg.theirs { align-self: flex-start; }
+  .msg.theirs .bubble { border-bottom-left-radius: 4px; }
+  .msg.mine { align-self: flex-end; align-items: flex-end; }
+  .msg.mine .bubble { background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+  .msg.pending .bubble { opacity: .6; }
+  .msg.failed .bubble { outline: 1px solid var(--danger); }
+
+  form.composer {
+    display: flex; gap: 8px; padding: 10px 12px; background: var(--surface);
+    border-top: 1px solid var(--surface-2);
+  }
+  .counter { color: var(--muted); font-size: 0.75rem; padding: 0 14px 6px; background: var(--surface); text-align: right; }
+  .counter.over { color: var(--danger); }
+
+  @media (min-width: 720px) {
+    #chat { max-width: 760px; margin: 0 auto; border-inline: 1px solid var(--surface-2); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- Screen 1: Welcome -->
+<main id="welcome" class="screen">
+  <div class="card">
+    <h1>Anonymous Chat</h1>
+    <p class="lead">One public room. No accounts, no history. You only see what's said while you're here.</p>
+
+    <form id="join-form" class="card" style="gap:12px" novalidate>
+      <div>
+        <label for="nickname">Nickname</label>
+        <div class="field">
+          <input id="nickname" type="text" maxlength="24" autocomplete="off"
+                 placeholder="2–24 characters" aria-describedby="nick-hint nick-error">
+          <button type="button" id="random-btn" class="btn">Random</button>
+        </div>
+        <p id="nick-hint" class="hint">Pick a name or generate one. Others will see it.</p>
+        <p id="nick-error" class="error" role="alert"></p>
+      </div>
+      <button type="submit" id="join-btn" class="btn primary">Join conversation</button>
+    </form>
+  </div>
+</main>
+
+<!-- Screen 2: Chat -->
+<section id="chat" class="screen" hidden>
+  <header class="bar">
+    <div>
+      <h2>Anonymous Chat</h2>
+      <div class="sub">Public conversation · <span id="me-name"></span></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span id="status" class="status" data-state="connecting" aria-live="polite">
+        <span class="dot"></span><span id="status-text">Connecting…</span>
+      </span>
+      <button type="button" id="leave-btn" class="btn">Leave</button>
+    </div>
+  </header>
+
+  <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
+    <p class="empty" id="empty-note">Nothing here yet. Messages sent after you joined will appear.</p>
+  </div>
+
+  <div id="counter" class="counter">0 / 500</div>
+  <form id="composer" class="composer" novalidate>
+    <label for="msg-input" style="position:absolute;left:-9999px">Message</label>
+    <input id="msg-input" type="text" autocomplete="off" placeholder="Write a message">
+    <button type="submit" id="send-btn" class="btn primary">Send</button>
+  </form>
+</section>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // ---------- Firebase config: PASTE YOUR OWN VALUES (Firebase Console > Project settings > Your apps) ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyDp_HlVfOgjzQdCWK4iAB_MHm4twZnCvag",
+    authDomain: "anonymous-68a75.firebaseapp.com",
+    databaseURL: "https://anonymous-68a75-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "anonymous-68a75",
+    appId: "1:430304804728:web:7248c4162ec07e579f528d"
+  };
+  const configured = !Object.values(firebaseConfig).some((v) => v.startsWith("PASTE"));
+  const db = configured ? getDatabase(initializeApp(firebaseConfig)) : null;
+
+  // ---------- Config ----------
+  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500;
+
+  // ---------- Elements ----------
+  const $ = (id) => document.getElementById(id);
+  const welcome = $('welcome'), chat = $('chat');
+  const nickInput = $('nickname'), nickError = $('nick-error');
+  const messagesEl = $('messages'), msgInput = $('msg-input'), counter = $('counter');
+
+  // ---------- State ----------
+  let nickname = '';
+
+  // ---------- Screens ----------
+  function showScreen(name) {
+    welcome.hidden = name !== 'welcome';
+    chat.hidden = name !== 'chat';
+    if (name === 'chat') msgInput.focus();
+  }
+
+  // ---------- Nickname ----------
+  const ADJ = ['Silent','Cosmic','Hidden','Curious','Shadow','Quiet','Lucky','Neon','Misty','Brave','Amber','Rusty'];
+  const NOUN = ['Wolf','Fox','Raven','Ghost','Traveler','Owl','Comet','Lynx','Otter','Falcon','Moth','Badger'];
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  function randomNickname() {
+    return pick(ADJ) + pick(NOUN) + Math.floor(Math.random() * 100);
+  }
+  function validateNickname(raw) {
+    const n = raw.trim().replace(/\s+/g, ' ');
+    if (n.length < NICK_MIN) return { error: `Nickname must be at least ${NICK_MIN} characters.` };
+    if (n.length > NICK_MAX) return { error: `Nickname must be at most ${NICK_MAX} characters.` };
+    return { value: n };
+  }
+
+  $('random-btn').addEventListener('click', () => {
+    nickInput.value = randomNickname();
+    nickError.textContent = '';
+  });
+
+  $('join-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const result = validateNickname(nickInput.value);
+    if (result.error) { nickError.textContent = result.error; nickInput.focus(); return; }
+    nickError.textContent = '';
+    nickname = result.value;
+    $('me-name').textContent = nickname;
+    showScreen('chat');
+    watchConnection();
+  });
+
+  // ---------- Rendering ----------
+  function formatTime(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Always textContent, never innerHTML, for user-supplied strings.
+  function renderMessage({ nick, text, ts, mine, state }) {
+    $('empty-note')?.remove();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ' + (mine ? 'mine' : 'theirs') + (state ? ' ' + state : '');
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = `${mine ? 'You' : nick} · ${formatTime(ts)}`;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    wrap.append(meta, bubble);
+
+    const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+    messagesEl.appendChild(wrap);
+    if (mine || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    return wrap;
+  }
+
+  // ---------- Status ----------
+  function setStatus(state, label) {
+    $('status').dataset.state = state;
+    $('status-text').textContent = label;
+  }
+
+  // ---------- Composer ----------
+  msgInput.addEventListener('input', () => {
+    const len = msgInput.value.length;
+    counter.textContent = `${len} / ${MSG_MAX}`;
+    counter.classList.toggle('over', len > MSG_MAX);
+  });
+
+  $('composer').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = msgInput.value.trim();
+    if (!text || text.length > MSG_MAX) return;
+    // Local echo only. Replaced by Firebase writes in Phase 4.
+    renderMessage({ nick: nickname, text, ts: Date.now(), mine: true });
+    msgInput.value = '';
+    counter.textContent = `0 / ${MSG_MAX}`;
+    msgInput.focus();
+  });
+
+  // ---------- Leave ----------
+  $('leave-btn').addEventListener('click', () => {
+    stopConnWatch?.(); stopConnWatch = null;
+    messagesEl.replaceChildren();
+    const note = document.createElement('p');
+    note.className = 'empty'; note.id = 'empty-note';
+    note.textContent = 'Nothing here yet. Messages sent after you joined will appear.';
+    messagesEl.appendChild(note);
+    showScreen('welcome');
+  });
+
+  // ---------- Connection (Phase 2) ----------
+  let stopConnWatch = null;
+  function watchConnection() {
+    if (!db) { setStatus('disconnected', 'Firebase not configured'); return; }
+    setStatus('connecting', 'Connecting…');
+    let wasConnected = false;
+    stopConnWatch = onValue(ref(db, '.info/connected'), (snap) => {
+      if (!navigator.onLine) return setStatus('disconnected', 'Offline');
+      if (snap.val() === true) { wasConnected = true; setStatus('connected', 'Connected'); }
+      else if (wasConnected) setStatus('reconnecting', 'Reconnecting…');
+      else setStatus('connecting', 'Connecting…');
+    }, () => setStatus('disconnected', 'Connection error'));
+  }
+  window.addEventListener('offline', () => setStatus('disconnected', 'Offline'));
+  window.addEventListener('online', () => { if (db && !chat.hidden) setStatus('reconnecting', 'Reconnecting…'); });
+
+  // ---------- Mobile keyboard handling ----------
+  // On Android Chrome the layout viewport may not shrink when the keyboard opens,
+  // so we size the app to the visual viewport instead.
+  if (window.visualViewport) {
+    const fit = () => {
+      document.documentElement.style.setProperty('--app-h', window.visualViewport.height + 'px');
+      if (!chat.hidden) messagesEl.scrollTop = messagesEl.scrollHeight;
+    };
+    window.visualViewport.addEventListener('resize', fit);
+    fit();
+  }
+</script>
+</body>
+</html>
