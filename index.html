@@ -92,6 +92,8 @@
   .tab { padding: 10px 6px; border-radius: 10px; border: 1px solid var(--surface-2); background: var(--surface); cursor: pointer; font-size: .9rem; }
   .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
   .link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; text-align: left; font-size: .9rem; }
+  .pending .link, .failed .link { display: none; }
+  .flag { color: var(--danger); }
   #older-btn { margin: 8px auto 0; font-size: .85rem; padding: 8px 14px; }
 
   @media (min-width: 720px) {
@@ -196,7 +198,7 @@
   msgInput.maxLength = MSG_MAX;
 
   // ---------- State ----------
-  let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false;
+  let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false, stopReports = null, reported = new Set();
   let stopConnWatch = null, stopMessages = null;
   const els = new Map();     // message key -> DOM element
   const pending = new Set(); // keys of messages we sent that the server hasn't confirmed
@@ -240,20 +242,60 @@
     bubble.className = 'bubble';
     bubble.textContent = text;
     wrap.append(meta, bubble);
-    if (isAdmin && key) {
-      const del = document.createElement('button');
-      del.type = 'button'; del.className = 'link'; del.textContent = 'Delete';
-      del.addEventListener('click', () => deleteMessage(key));
-      meta.append(' · ', del);
+    if (key) {
+      const addLink = (label, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'link'; b.textContent = label;
+        b.addEventListener('click', fn);
+        meta.append(' · ', b);
+      };
+      if (mine || isAdmin) addLink('Delete', () => deleteMessage(key));
+      if (!mine && !isAdmin) addLink('Report', () => reportMessage(key, nick, text));
+      if (isAdmin && reported.has(key)) meta.append(makeFlag());
     }
     return wrap;
+  }
+
+  function makeFlag() {
+    const f = document.createElement('span');
+    f.className = 'flag'; f.textContent = ' · ⚑ reported';
+    return f;
+  }
+  function applyBadges() {
+    for (const [key, el] of els) {
+      const meta = el.querySelector('.meta'), flag = meta.querySelector('.flag');
+      if (reported.has(key) && !flag) meta.append(makeFlag());
+      else if (!reported.has(key) && flag) flag.remove();
+    }
+  }
+  function watchReports() {
+    stopReports = onValue(ref(db, 'reports'), (snap) => {
+      reported = new Set(Object.keys(snap.val() || {}));
+      applyBadges();
+    }, () => {});
+  }
+
+  async function reportMessage(key, nick, text) {
+    if (!confirm('Report this message to the admin?')) return;
+    try {
+      await set(ref(db, `reports/${key}/${uid}`), { nick, text, ts: serverTimestamp() });
+      alert('Reported. Thank you.');
+    } catch (err) {
+      console.error(err);
+      alert(err.code === 'PERMISSION_DENIED' ? 'You already reported this message.' : 'Report failed.');
+    }
   }
 
   function dropElement(key) { els.get(key)?.remove(); els.delete(key); }
 
   async function deleteMessage(key) {
     if (!confirm('Delete this message for everyone?')) return;
-    try { await remove(ref(db, `messages/${key}`)); dropElement(key); }
+    try {
+      // Admins also clear the message's reports in the same write; normal users may only delete their own message.
+      await (isAdmin ? update(ref(db), { [`messages/${key}`]: null, [`reports/${key}`]: null })
+                     : remove(ref(db, `messages/${key}`)));
+      dropElement(key);
+    }
     catch (err) { console.error(err); alert('Delete failed.'); }
   }
 
@@ -420,6 +462,7 @@
       $('me-name').textContent = nickname;
       isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
       $('purge-btn').hidden = !isAdmin;
+      if (isAdmin) watchReports();
       showScreen('chat');
       watchConnection();
       listen();
@@ -503,6 +546,7 @@
   $('leave-btn').addEventListener('click', async () => {
     stopMessages?.(); stopMessages = null;
     stopConnWatch?.(); stopConnWatch = null;
+    stopReports?.(); stopReports = null; reported = new Set();
     uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true;
     els.clear(); pending.clear();
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
