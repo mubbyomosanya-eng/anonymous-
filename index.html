@@ -147,9 +147,11 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getDatabase, ref, onValue, push, set, query, orderByChild, startAt, onChildAdded, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-  // ---------- Firebase config: PASTE YOUR OWN VALUES (Firebase Console > Project settings > Your apps) ----------
+  // ---------- Firebase config (public by design; security lives in the database rules) ----------
   const firebaseConfig = {
     apiKey: "AIzaSyDp_HlVfOgjzQdCWK4iAB_MHm4twZnCvag",
     authDomain: "anonymous-68a75.firebaseapp.com",
@@ -158,19 +160,28 @@
     appId: "1:430304804728:web:7248c4162ec07e579f528d"
   };
   const configured = !Object.values(firebaseConfig).some((v) => v.startsWith("PASTE"));
-  const db = configured ? getDatabase(initializeApp(firebaseConfig)) : null;
+  let db = null, auth = null;
+  if (configured) {
+    const app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    auth = getAuth(app);
+  }
 
-  // ---------- Config ----------
-  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500;
+  // ---------- Constants ----------
+  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500, SEND_COOLDOWN_MS = 1000;
 
   // ---------- Elements ----------
   const $ = (id) => document.getElementById(id);
   const welcome = $('welcome'), chat = $('chat');
   const nickInput = $('nickname'), nickError = $('nick-error');
   const messagesEl = $('messages'), msgInput = $('msg-input'), counter = $('counter');
+  msgInput.maxLength = MSG_MAX;
 
   // ---------- State ----------
-  let nickname = '';
+  let nickname = '', uid = null, joining = false, lastSend = 0;
+  let stopConnWatch = null, stopMessages = null;
+  const els = new Map();     // message key -> DOM element
+  const pending = new Set(); // keys of messages we sent that the server hasn't confirmed
 
   // ---------- Screens ----------
   function showScreen(name) {
@@ -183,9 +194,8 @@
   const ADJ = ['Silent','Cosmic','Hidden','Curious','Shadow','Quiet','Lucky','Neon','Misty','Brave','Amber','Rusty'];
   const NOUN = ['Wolf','Fox','Raven','Ghost','Traveler','Owl','Comet','Lynx','Otter','Falcon','Moth','Badger'];
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-  function randomNickname() {
-    return pick(ADJ) + pick(NOUN) + Math.floor(Math.random() * 100);
-  }
+  const randomNickname = () => pick(ADJ) + pick(NOUN) + Math.floor(Math.random() * 100);
+
   function validateNickname(raw) {
     const n = raw.trim().replace(/\s+/g, ' ');
     if (n.length < NICK_MIN) return { error: `Nickname must be at least ${NICK_MIN} characters.` };
@@ -198,21 +208,8 @@
     nickError.textContent = '';
   });
 
-  $('join-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const result = validateNickname(nickInput.value);
-    if (result.error) { nickError.textContent = result.error; nickInput.focus(); return; }
-    nickError.textContent = '';
-    nickname = result.value;
-    $('me-name').textContent = nickname;
-    showScreen('chat');
-    watchConnection();
-  });
-
   // ---------- Rendering ----------
-  function formatTime(ts) {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // Always textContent, never innerHTML, for user-supplied strings.
   function renderMessage({ nick, text, ts, mine, state }) {
@@ -233,45 +230,21 @@
     return wrap;
   }
 
-  // ---------- Status ----------
-  function setStatus(state, label) {
-    $('status').dataset.state = state;
-    $('status-text').textContent = label;
-  }
-
-  // ---------- Composer ----------
-  msgInput.addEventListener('input', () => {
-    const len = msgInput.value.length;
-    counter.textContent = `${len} / ${MSG_MAX}`;
-    counter.classList.toggle('over', len > MSG_MAX);
-  });
-
-  $('composer').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = msgInput.value.trim();
-    if (!text || text.length > MSG_MAX) return;
-    // Local echo only. Replaced by Firebase writes in Phase 4.
-    renderMessage({ nick: nickname, text, ts: Date.now(), mine: true });
-    msgInput.value = '';
-    counter.textContent = `0 / ${MSG_MAX}`;
-    msgInput.focus();
-  });
-
-  // ---------- Leave ----------
-  $('leave-btn').addEventListener('click', () => {
-    stopConnWatch?.(); stopConnWatch = null;
+  function resetMessages() {
     messagesEl.replaceChildren();
     const note = document.createElement('p');
     note.className = 'empty'; note.id = 'empty-note';
     note.textContent = 'Nothing here yet. Messages sent after you joined will appear.';
     messagesEl.appendChild(note);
-    showScreen('welcome');
-  });
+  }
 
-  // ---------- Connection (Phase 2) ----------
-  let stopConnWatch = null;
+  function setStatus(state, label) {
+    $('status').dataset.state = state;
+    $('status-text').textContent = label;
+  }
+
+  // ---------- Connection ----------
   function watchConnection() {
-    if (!db) { setStatus('disconnected', 'Firebase not configured'); return; }
     setStatus('connecting', 'Connecting…');
     let wasConnected = false;
     stopConnWatch = onValue(ref(db, '.info/connected'), (snap) => {
@@ -281,12 +254,134 @@
       else setStatus('connecting', 'Connecting…');
     }, () => setStatus('disconnected', 'Connection error'));
   }
-  window.addEventListener('offline', () => setStatus('disconnected', 'Offline'));
-  window.addEventListener('online', () => { if (db && !chat.hidden) setStatus('reconnecting', 'Reconnecting…'); });
+  window.addEventListener('offline', () => { if (uid) setStatus('disconnected', 'Offline'); });
+  window.addEventListener('online', () => { if (uid) setStatus('reconnecting', 'Reconnecting…'); });
+
+  // The client clock can be wrong. Ask Firebase how far off it is, so "joined at" uses server time.
+  function getServerOffset() {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 8000);
+      onValue(ref(db, '.info/serverTimeOffset'), (s) => { clearTimeout(timer); resolve(s.val() || 0); }, { onlyOnce: true });
+    });
+  }
+
+  // ---------- Live-only listener ----------
+  // Only messages with ts >= join time. This is a display filter, not access control (see rules notes).
+  function listen(since) {
+    const q = query(ref(db, 'messages'), orderByChild('ts'), startAt(since));
+    stopMessages = onChildAdded(q, (snap) => {
+      const key = snap.key;
+      if (els.has(key)) return;
+      const v = snap.val() || {};
+      if (typeof v.text !== 'string' || typeof v.nick !== 'string') return; // ignore malformed data
+      els.set(key, renderMessage({
+        nick: v.nick.slice(0, NICK_MAX),
+        text: v.text.slice(0, MSG_MAX),
+        ts: Number(v.ts) || Date.now(),
+        mine: v.uid === uid,
+        state: pending.has(key) ? 'pending' : ''
+      }));
+    }, () => setStatus('disconnected', 'Cannot read messages'));
+  }
+
+  // ---------- Join ----------
+  function setJoining(on) {
+    joining = on;
+    $('join-btn').disabled = on;
+    $('join-btn').textContent = on ? 'Joining…' : 'Join conversation';
+  }
+
+  function joinErrorMessage(err) {
+    console.error(err);
+    const map = {
+      'auth/operation-not-allowed': 'Anonymous sign-in is not enabled in Firebase Authentication.',
+      'auth/unauthorized-domain': "This website's domain is not listed in Firebase Authorized domains.",
+      'auth/network-request-failed': 'Network error. Check your connection and try again.',
+      'auth/too-many-requests': 'Too many attempts. Try again later.'
+    };
+    if (map[err.code]) return map[err.code];
+    if (err.message === 'timeout') return 'Could not reach the server. Try again.';
+    return 'Could not join. Try again.';
+  }
+
+  $('join-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (joining) return;
+    const result = validateNickname(nickInput.value);
+    if (result.error) { nickError.textContent = result.error; nickInput.focus(); return; }
+    if (!configured) { nickError.textContent = 'Firebase is not configured.'; return; }
+    nickError.textContent = '';
+    setJoining(true);
+    try {
+      const cred = await signInAnonymously(auth);
+      const offset = await getServerOffset();
+      uid = cred.user.uid;
+      nickname = result.value;
+      $('me-name').textContent = nickname;
+      showScreen('chat');
+      watchConnection();
+      listen(Date.now() + offset);
+    } catch (err) {
+      nickError.textContent = joinErrorMessage(err);
+      if (auth.currentUser) signOut(auth).catch(() => {});
+    } finally {
+      setJoining(false);
+    }
+  });
+
+  // ---------- Send ----------
+  msgInput.addEventListener('input', () => {
+    counter.textContent = `${msgInput.value.length} / ${MSG_MAX}`;
+  });
+
+  function markFailed(key, text) {
+    if (!uid) return; // already left
+    const el = els.get(key) ?? renderMessage({ nick: nickname, text, ts: Date.now(), mine: true });
+    els.set(key, el);
+    el.classList.remove('pending');
+    el.classList.add('failed');
+    el.querySelector('.meta').textContent += ' · Failed to send';
+  }
+
+  $('composer').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = msgInput.value.trim();
+    if (!text || text.length > MSG_MAX || !uid) return;
+    const now = Date.now();
+    if (now - lastSend < SEND_COOLDOWN_MS) return; // basic accidental-repeat guard (client-side only)
+    lastSend = now;
+    $('send-btn').disabled = true;
+    setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
+
+    const newRef = push(ref(db, 'messages'));
+    const key = newRef.key;
+    pending.add(key);
+    msgInput.value = '';
+    counter.textContent = `0 / ${MSG_MAX}`;
+    msgInput.focus();
+    try {
+      await set(newRef, { uid, nick: nickname, text, ts: serverTimestamp() });
+      pending.delete(key);
+      els.get(key)?.classList.remove('pending');
+    } catch (err) {
+      console.error(err);
+      pending.delete(key);
+      markFailed(key, text);
+    }
+  });
+
+  // ---------- Leave ----------
+  $('leave-btn').addEventListener('click', async () => {
+    stopMessages?.(); stopMessages = null;
+    stopConnWatch?.(); stopConnWatch = null;
+    uid = null;
+    els.clear(); pending.clear();
+    resetMessages();
+    showScreen('welcome');
+    if (auth) await signOut(auth).catch(() => {});
+  });
 
   // ---------- Mobile keyboard handling ----------
-  // On Android Chrome the layout viewport may not shrink when the keyboard opens,
-  // so we size the app to the visual viewport instead.
   if (window.visualViewport) {
     const fit = () => {
       document.documentElement.style.setProperty('--app-h', window.visualViewport.height + 'px');
