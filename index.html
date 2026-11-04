@@ -150,6 +150,7 @@
   </header>
 
   <button type="button" id="older-btn" class="btn" hidden>Load older messages</button>
+  <button type="button" id="purge-btn" class="btn" hidden style="margin:6px auto 0; font-size:.8rem; padding:6px 12px">Admin: purge messages older than 30 days</button>
   <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
     <p class="empty" id="empty-note">Nothing here yet. Messages sent after you joined will appear.</p>
   </div>
@@ -165,7 +166,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, signInAnonymously, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, endBefore, get, onChildAdded, serverTimestamp }
+  import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, limitToFirst, endBefore, get, update, remove, onChildAdded, onChildRemoved, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
   // ---------- Firebase config (public by design; security lives in the database rules) ----------
@@ -185,7 +186,7 @@
   }
 
   // ---------- Constants ----------
-  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500, SEND_COOLDOWN_MS = 1000;
+  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500, SEND_COOLDOWN_MS = 1500 /* server rule enforces 1000ms; margin covers network jitter */;
 
   // ---------- Elements ----------
   const $ = (id) => document.getElementById(id);
@@ -195,7 +196,7 @@
   msgInput.maxLength = MSG_MAX;
 
   // ---------- State ----------
-  let nickname = '', uid = null, joining = false, lastSend = 0;
+  let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false;
   let stopConnWatch = null, stopMessages = null;
   const els = new Map();     // message key -> DOM element
   const pending = new Set(); // keys of messages we sent that the server hasn't confirmed
@@ -229,7 +230,7 @@
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   // Always textContent, never innerHTML, for user-supplied strings.
-  function buildMessage({ nick, text, ts, mine, state }) {
+  function buildMessage({ key, nick, text, ts, mine, state }) {
     const wrap = document.createElement('div');
     wrap.className = 'msg ' + (mine ? 'mine' : 'theirs') + (state ? ' ' + state : '');
     const meta = document.createElement('div');
@@ -239,7 +240,21 @@
     bubble.className = 'bubble';
     bubble.textContent = text;
     wrap.append(meta, bubble);
+    if (isAdmin && key) {
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'link'; del.textContent = 'Delete';
+      del.addEventListener('click', () => deleteMessage(key));
+      meta.append(' · ', del);
+    }
     return wrap;
+  }
+
+  function dropElement(key) { els.get(key)?.remove(); els.delete(key); }
+
+  async function deleteMessage(key) {
+    if (!confirm('Delete this message for everyone?')) return;
+    try { await remove(ref(db, `messages/${key}`)); dropElement(key); }
+    catch (err) { console.error(err); alert('Delete failed.'); }
   }
 
   function renderMessage(m) {
@@ -298,8 +313,16 @@
       const m = toView(snap);
       if (!m) return;
       track(key, m.ts);
-      els.set(key, renderMessage({ ...m, state: pending.has(key) ? 'pending' : '' }));
+      els.set(key, renderMessage({ ...m, key, state: pending.has(key) ? 'pending' : '' }));
     }, () => setStatus('disconnected', 'Cannot read messages'));
+    // child_removed also fires when the 50-message window slides, so confirm the message is really gone.
+    const offRemoved = onChildRemoved(q, async (snap) => {
+      const key = snap.key;
+      if (pending.has(key) || !els.has(key)) return; // rollback of our own failed write
+      try { if (!(await get(ref(db, 'messages/' + key))).exists()) dropElement(key); } catch { /* keep it */ }
+    });
+    const offAdded = stopMessages;
+    stopMessages = () => { offAdded(); offRemoved(); };
     $('older-btn').hidden = false;
   }
 
@@ -314,7 +337,7 @@
       const prevH = messagesEl.scrollHeight;
       const first = messagesEl.querySelector('.msg');
       for (const [key, m] of items) {            // ascending order, each inserted before the first loaded message
-        const el = buildMessage(m);
+        const el = buildMessage({ ...m, key });
         messagesEl.insertBefore(el, first);
         els.set(key, el);
         track(key, m.ts);
@@ -395,6 +418,8 @@
       uid = user.uid;
       nickname = nick;
       $('me-name').textContent = nickname;
+      isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
+      $('purge-btn').hidden = !isAdmin;
       showScreen('chat');
       watchConnection();
       listen();
@@ -446,7 +471,10 @@
     counter.textContent = `0 / ${MSG_MAX}`;
     msgInput.focus();
     try {
-      await set(newRef, { uid, nick: nickname, text, ts: serverTimestamp() });
+      await update(ref(db), {
+        [`messages/${key}`]: { uid, nick: nickname, text, ts: serverTimestamp() },
+        [`lastPost/${uid}`]: serverTimestamp() // rules require this in the same write
+      });
       pending.delete(key);
       els.get(key)?.classList.remove('pending');
     } catch (err) {
@@ -456,11 +484,26 @@
     }
   });
 
+  // ---------- Admin purge (rules only allow admins to delete) ----------
+  $('purge-btn').addEventListener('click', async () => {
+    if (!isAdmin || !confirm('Delete up to 500 messages older than 30 days?')) return;
+    const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
+    try {
+      const snap = await get(query(ref(db, 'messages'), orderByChild('ts'), endBefore(cutoff), limitToFirst(500)));
+      if (!snap.exists()) { alert('Nothing older than 30 days.'); return; }
+      const updates = {};
+      snap.forEach((c) => { updates['messages/' + c.key] = null; });
+      await update(ref(db), updates);
+      snap.forEach((c) => dropElement(c.key));
+      alert(`Deleted ${snap.size} messages.`);
+    } catch (err) { console.error(err); alert('Purge failed.'); }
+  });
+
   // ---------- Leave ----------
   $('leave-btn').addEventListener('click', async () => {
     stopMessages?.(); stopMessages = null;
     stopConnWatch?.(); stopConnWatch = null;
-    uid = null; oldest = null;
+    uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true;
     els.clear(); pending.clear();
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
     resetMessages();
