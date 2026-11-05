@@ -1,0 +1,20 @@
+{
+  "name": "Anonymous Chat",
+  "short_name": "AnonChat",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0f12",
+  "theme_color": "#0e1113",
+  "icons": [
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Green_square.svg/512px-Green_square.svg.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Green_square.svg/512px-Green_square.svg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
