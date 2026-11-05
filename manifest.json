@@ -7,14 +7,10 @@
   "theme_color": "#0e1113",
   "icons": [
     {
-      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Green_square.svg/512px-Green_square.svg.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Green_square.svg/512px-Green_square.svg.png",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='168' fill='%2357d6a0'/%3E%3Cline x1='144' y1='400' x2='224' y2='112' stroke='%2306140d' stroke-width='56' stroke-linecap='round'/%3E%3Cline x1='288' y1='400' x2='368' y2='112' stroke='%2306140d' stroke-width='56' stroke-linecap='round'/%3E%3C/svg%3E",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
