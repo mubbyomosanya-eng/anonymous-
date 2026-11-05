@@ -147,7 +147,6 @@
   .msg.cont .name, .msg.cont .you { display: none; }
   .msg.cont .meta { display: none; }
   .bubble { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: 1.05rem; }
-  .msg.pending .bubble { opacity: .55; }
   .msg.failed .bubble { color: var(--danger); }
   .quote { display: block; width: 100%; text-align: left; margin: 3px 0 5px; padding: 5px 12px; border: 0; border-left: 3px solid var(--accent); border-radius: 8px;
     background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--muted); cursor: pointer; font-size: .95rem;
@@ -297,7 +296,7 @@
     <div id="counter" class="counter"></div>
     <form id="composer" class="composer" novalidate>
       <label for="msg-input" style="position:absolute;left:-9999px">Message</label>
-      <textarea id="msg-input" rows="1" autocomplete="off" placeholder="Message /public"></textarea>
+      <textarea id="msg-input" rows="1" maxlength="500" autocomplete="off" placeholder="Message /public"></textarea>
       <button type="submit" id="send-btn" class="btn primary send" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </form>
   </div>
@@ -368,7 +367,7 @@
   }
 
   // ---------- Constants ----------
-  const MSG_MAX = 500, SEND_COOLDOWN_MS = 1500;
+  const MSG_MAX = 500;
 
   // ---------- Elements ----------
   const $ = (id) => document.getElementById(id);
@@ -378,7 +377,7 @@
   msgInput.maxLength = MSG_MAX;
 
   // ---------- State ----------
-  let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false, stopReports = null, reported = new Set();
+  let nickname = '', uid = null, joining = false, isAdmin = false, stopReports = null, reported = new Set();
   let stopConnWatch = null, stopMessages = null;
   let room = { type: 'public' }, stopInbox = null, stopBlock = null;
   let replyTo = null, editing = null, lastDay = '';
@@ -418,7 +417,6 @@
     const avatar = document.createElement('div');
     avatar.className = 'avatar'; avatar.setAttribute('aria-hidden', 'true');
     avatar.textContent = initialOf(nick); avatar.dataset.initial = initialOf(nick);
-    if (authorUid) { avatar.dataset.uid = authorUid; useAvatar(authorUid, avatar); }
     const body = document.createElement('div');
     body.className = 'body';
     const meta = document.createElement('div');
@@ -447,6 +445,13 @@
     bubble.textContent = text;
     body.append(bubble);
     wrap.append(avatar, body);
+
+    // Avatar AFTER append — see paintOne/useAvatar below
+    if (authorUid) {
+      avatar.dataset.uid = authorUid;
+      useAvatar(authorUid, avatar);
+    }
+
     if (key) {
       const actions = document.createElement('div');
       actions.className = 'actions';
@@ -726,7 +731,9 @@
     $('me-name-2').textContent = nick;
     $('me-avatar').textContent = initialOf(nick);
     $('me-avatar').style.setProperty('--h', hueOf(nick));
-    $('me-avatar').dataset.uid = uid; $('me-avatar').dataset.initial = initialOf(nick); useAvatar(uid, $('me-avatar'));
+    $('me-avatar').dataset.uid = uid;
+    $('me-avatar').dataset.initial = initialOf(nick);
+    useAvatar(uid, $('me-avatar'));
     isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
     $('purge-btn').hidden = !isAdmin;
     if (isAdmin) watchReports();
@@ -859,7 +866,7 @@
       console.error(err);
       pending.delete(key);
       markFailed(key, text, rt);
-      toast('Retry failed. Wait a moment and try again.');
+      toast('Retry failed. Try again in a moment.');
     }
   }
 
@@ -870,7 +877,8 @@
     const key = newRef.key;
 
     pending.add(key);
-    els.set(key, renderMessage({ nick: nickname, text, ts: Date.now(), mine: true, key, state: 'pending', replyTo: rt }));
+    // Pass uid so the avatar's data-uid gets set on the optimistic element too
+    els.set(key, renderMessage({ uid, nick: nickname, text, ts: Date.now(), mine: true, key, state: 'pending', replyTo: rt }));
     msgData.set(key, { nick: nickname, text });
     clearCtx(true);
     msgInput.focus();
@@ -903,10 +911,6 @@
     const text = msgInput.value.trim().replace(/\n{3,}/g, '\n\n');
     if (!text || text.length > MSG_MAX) return;
 
-    const now = Date.now();
-    if (now - lastSend < SEND_COOLDOWN_MS) { toast('Please wait a moment'); return; }
-    lastSend = now;
-
     if (editing) {
       const { key, path } = editing;
       const unchanged = msgData.get(key)?.text === text;
@@ -914,12 +918,9 @@
       if (unchanged) return;
       try {
         await update(ref(db), { [`${path}/${key}/text`]: text, [`${path}/${key}/edited`]: serverTimestamp(), [`lastPost/${uid}`]: serverTimestamp() });
-      } catch (err) { console.error(err); toast('Edit failed — wait a moment and try again.'); }
+      } catch (err) { console.error(err); toast('Edit failed — try again.'); }
       return;
     }
-
-    $('send-btn').disabled = true;
-    setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
 
     await sendMessage(text);
   });
@@ -998,19 +999,39 @@
 
   // ---------- Profile pictures ----------
   const AVATAR_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
+
+  function paintOne(el, url) {
+    if (!el || !url || !AVATAR_RE.test(url)) return;
+    el.style.backgroundImage = `url("${url}")`;
+    el.classList.add('photo');
+    el.textContent = '';
+  }
+
   function paintAll(u) {
     const url = avatarCache.get(u);
+    if (!url || !AVATAR_RE.test(url)) return;
     document.querySelectorAll('.avatar[data-uid]').forEach((el) => {
-      if (el.dataset.uid !== u) return;
-      if (url && AVATAR_RE.test(url)) { el.style.backgroundImage = `url("${url}")`; el.classList.add('photo'); el.textContent = ''; }
-      else { el.style.backgroundImage = ''; el.classList.remove('photo'); el.textContent = el.dataset.initial || '?'; }
+      if (el.dataset.uid === u) paintOne(el, url);
     });
   }
+
   function useAvatar(u, el) {
-    if (avatarCache.has(u)) { if (avatarCache.get(u)) paintAll(u); return; }
-    avatarCache.set(u, null);
-    get(ref(db, 'avatars/' + u)).then((s) => { avatarCache.set(u, s.val() || null); paintAll(u); }).catch(() => {});
+    if (avatarCache.has(u)) {
+      const url = avatarCache.get(u);
+      if (url && AVATAR_RE.test(url)) paintOne(el, url);
+      return;
+    }
+    avatarCache.set(u, null); // mark as requested
+    get(ref(db, 'avatars/' + u)).then((s) => {
+      const url = s.val() || null;
+      avatarCache.set(u, url);
+      if (url && AVATAR_RE.test(url)) {
+        paintOne(el, url);
+        paintAll(u);
+      }
+    }).catch(() => {});
   }
+
   async function setAvatar(file) {
     try {
       const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -1020,14 +1041,25 @@
       c.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 96, 96);
       const url = c.toDataURL('image/jpeg', 0.8);
       await set(ref(db, 'avatars/' + uid), url);
-      avatarCache.set(uid, url); paintAll(uid);
+      avatarCache.set(uid, url);
+      paintAll(uid);
       toast('Profile picture updated.');
     } catch (e) { console.error(e); toast('Could not use that image.'); }
   }
   $('avatar-pick').addEventListener('click', () => $('avatar-file').click());
   $('avatar-file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) setAvatar(f); });
   $('avatar-remove').addEventListener('click', async () => {
-    try { await remove(ref(db, 'avatars/' + uid)); avatarCache.set(uid, null); paintAll(uid); toast('Profile picture removed.'); }
+    try {
+      await remove(ref(db, 'avatars/' + uid));
+      avatarCache.set(uid, null);
+      document.querySelectorAll('.avatar[data-uid]').forEach((el) => {
+        if (el.dataset.uid !== uid) return;
+        el.style.backgroundImage = '';
+        el.classList.remove('photo');
+        el.textContent = el.dataset.initial || '?';
+      });
+      toast('Profile picture removed.');
+    }
     catch (e) { console.error(e); toast('Could not remove it.'); }
   });
 
@@ -1138,8 +1170,6 @@
     room = { type: 'public' };
     setHeader('/', 'public');
     $('block-btn').hidden = true;
-    $('dm-section').hidden = false;
-    $('avatar-section').hidden = false;
     highlightRooms();
     watchInbox();
   }
@@ -1160,8 +1190,9 @@
     stopInbox?.(); stopInbox = null; stopBlock?.(); stopBlock = null;
     room = { type: 'public' }; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
     uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true; entered = false;
-    els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); clearCtx(true);
-    $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
+    els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); avatarCache.clear(); clearCtx(true);
+    $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages';
+    $('password').value = ''; $('email').value = '';
     resetMessages();
     showScreen('welcome');
     if (auth) await signOut(auth).catch(() => {});
@@ -1178,4 +1209,3 @@
   }
 </script>
 </body>
-</html>
