@@ -17,7 +17,7 @@
     --mono: var(--font);
     --display: 'Caveat', 'Patrick Hand', cursive;
     --shadow: 0 12px 32px rgba(0,0,0,.45);
-    --app-h: 100dvh; /* overwritten by JS when the keyboard opens */
+    --app-h: 100dvh;
   }
   :root[data-theme="midnight"] { --bg: #0a0e19; --rail: #070a13; --panel: #0f1525; --panel-2: #151c31; --panel-3: #1c2540; --line: #222c48; }
   :root[data-theme="charcoal"] { --bg: #151515; --rail: #0f0f0f; --panel: #1b1b1b; --panel-2: #222222; --panel-3: #2a2a2a; --line: #303030; }
@@ -157,8 +157,9 @@
     border-radius: 11px; box-shadow: var(--shadow); z-index: 2; }
   .msg:hover .actions, .msg.open .actions { display: flex; }
   @media (hover: none) { .msg:hover:not(.open) .actions { display: none; } }
-  .pending .actions, .failed .actions { display: none !important; }
-  .act { width: 34px; height: 30px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); border-radius: 8px; cursor: pointer; }
+  .pending .actions { display: none !important; }
+  .failed .actions { display: flex !important; }
+  .act { min-width: 34px; height: 30px; display: grid; place-items: center; padding: 0 8px; border: 0; background: none; color: var(--muted); border-radius: 8px; cursor: pointer; font-size: 1rem; line-height: 1; }
   .act svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .act:hover { background: var(--panel-2); color: var(--accent); }
   .act.danger:hover { color: var(--danger); }
@@ -168,7 +169,7 @@
   .ctxbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: calc(100% - 32px); max-width: 920px; margin: 0 auto 6px; padding: 7px 14px;
     background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 12px; color: var(--muted); font-size: .95rem; }
   #ctx-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .counter { width: calc(100% - 32px); max-width: 920px; margin: 0 auto 4px; text-align: right; font-size: .8rem; color: var(--muted); }
+  .counter { width: calc(100% - 32px); max-width: 920px; margin: 0 auto 4px; text-align: right; font-size: .8rem; color: var(--muted); min-height: 1em; }
   form.composer { display: flex; align-items: flex-end; gap: 8px; width: calc(100% - 32px); max-width: 920px; margin: 0 auto calc(14px + env(safe-area-inset-bottom, 0px));
     padding: 6px 6px 6px 18px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
   form.composer:focus-within { border-color: var(--accent); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -196,7 +197,6 @@
     body.nav-open .scrim { display: none; }
     .bar .sub { display: none; }
   }
-  .bar .sub { display: none; }
   @media (max-width: 520px) {
     header.bar { padding: 10px 12px; gap: 8px; }
     .bar h2 { font-size: 1.6rem; }
@@ -220,7 +220,7 @@
   <div class="card">
     <div class="mark" aria-hidden="true">//</div>
     <h1>Anonymous Chat</h1>
-    <p class="lead">One public room. Join as a guest or with an account. Recent messages are kept for everyone.</p>
+    <p class="lead">One public room. Join as a guest or with an account. Recent messages are kept for everyone. Anyone in the room can read what you post — don't share personal info.</p>
 
     <form id="join-form" class="card" style="gap:12px" novalidate>
       <div class="tabs" role="group" aria-label="How to join">
@@ -299,7 +299,7 @@
 
     <div id="ctx-bar" class="ctxbar" hidden><span id="ctx-text"></span><button type="button" id="ctx-cancel" class="link" aria-label="Cancel">✕</button></div>
     <button type="button" id="jump-btn" class="btn" hidden>↓ New messages</button>
-    <div id="counter" class="counter">0 / 500</div>
+    <div id="counter" class="counter"></div>
     <form id="composer" class="composer" novalidate>
       <label for="msg-input" style="position:absolute;left:-9999px">Message</label>
       <textarea id="msg-input" rows="1" autocomplete="off" placeholder="Message /public"></textarea>
@@ -340,6 +340,11 @@
         <button type="button" class="btn" data-theme-opt="midnight">Midnight</button>
         <button type="button" class="btn" data-theme-opt="charcoal">Charcoal</button>
       </div></div>
+    <div><label>Send with</label>
+      <div class="opts">
+        <button type="button" class="btn" data-enter-opt="true">Enter</button>
+        <button type="button" class="btn" data-enter-opt="false">Ctrl / ⌘ + Enter</button>
+      </div></div>
     <p class="hint">Saved on this device only.</p>
     <button type="button" id="settings-close" class="btn primary">Done</button>
   </div>
@@ -368,7 +373,7 @@
   }
 
   // ---------- Constants ----------
-  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500, SEND_COOLDOWN_MS = 1500 /* server rule enforces 1000ms; margin covers network jitter */;
+  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500, SEND_COOLDOWN_MS = 1500;
 
   // ---------- Elements ----------
   const $ = (id) => document.getElementById(id);
@@ -382,12 +387,14 @@
   let stopConnWatch = null, stopMessages = null;
   let room = { type: 'public' }, stopInbox = null, stopBlock = null, isAccount = false;
   let replyTo = null, editing = null, lastDay = '';
-  const msgData = new Map();     // key -> { nick, text } for loaded messages (reply quotes, edits)
-  const avatarCache = new Map(); // uid -> data URL or null
+  let entered = false; // guard against double enterChat (form + onAuthStateChanged)
+  const msgData = new Map();
+  const failedMsgs = new Map(); // key -> { text, rt } for retry
+  const avatarCache = new Map();
   const base = () => (room.type === 'dm' ? `dms/${room.chatId}/messages` : 'messages');
-  let lastMsg = null; // previous rendered message, for grouping consecutive posts
-  const els = new Map();     // message key -> DOM element
-  const pending = new Set(); // keys of messages we sent that the server hasn't confirmed
+  let lastMsg = null;
+  const els = new Map();
+  const pending = new Set();
 
   // ---------- Screens ----------
   function showScreen(name) {
@@ -414,6 +421,7 @@
     nickInput.value = randomNickname();
     nickError.textContent = '';
   });
+  nickInput.addEventListener('input', () => { nickError.textContent = ''; });
 
   // ---------- Rendering ----------
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -421,7 +429,6 @@
   function hueOf(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
   const initialOf = (s) => (Array.from(s)[0] || '?').toUpperCase();
 
-  // Always textContent, never innerHTML, for user-supplied strings.
   const ICONS = {
     reply: '<path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v3"/>',
     edit: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
@@ -453,7 +460,7 @@
     if (rt) {
       const q = document.createElement('button');
       q.type = 'button'; q.className = 'quote';
-      const live = msgData.get(rt.key) || rt; // prefer the real message over the sender-supplied snapshot
+      const live = msgData.get(rt.key) || rt;
       const qn = document.createElement('b');
       qn.textContent = live.nick;
       q.append(qn, ' ' + live.text.slice(0, 100));
@@ -472,7 +479,7 @@
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'act' + (danger ? ' danger' : '');
         b.title = label; b.setAttribute('aria-label', label);
-        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[kind]}</svg>`; // static markup, no user data
+        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[kind]}</svg>`;
         b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
         actions.append(b);
       };
@@ -484,7 +491,7 @@
         if (isAdmin && reported.has(key)) meta.append(makeFlag());
       }
       wrap.append(actions);
-      wrap.addEventListener('click', () => { // tap a message to show its actions on touch screens
+      wrap.addEventListener('click', () => {
         document.querySelectorAll('.msg.open').forEach((x) => { if (x !== wrap) x.classList.remove('open'); });
         wrap.classList.toggle('open');
       });
@@ -499,7 +506,9 @@
   }
   function applyBadges() {
     for (const [key, el] of els) {
-      const meta = el.querySelector('.meta'), flag = meta.querySelector('.flag');
+      const meta = el.querySelector('.meta');
+      if (!meta) continue;
+      const flag = meta.querySelector('.flag');
       if (reported.has(key) && !flag) meta.append(makeFlag());
       else if (!reported.has(key) && flag) flag.remove();
     }
@@ -522,15 +531,20 @@
     }
   }
 
-  function dropElement(key) { els.get(key)?.remove(); els.delete(key); }
+  function dropElement(key) {
+    els.get(key)?.remove();
+    els.delete(key);
+    msgData.delete(key);
+    failedMsgs.delete(key);
+    pending.delete(key);
+  }
 
   async function deleteMessage(key) {
     if (!confirm('Delete this message for everyone?')) return;
     try {
       await remove(ref(db, `${base()}/${key}`));
       dropElement(key);
-      // Admins also clear the message's reports; best effort, so a rules problem here never blocks the delete.
-      if (isAdmin) remove(ref(db, `reports/${key}`)).catch((e) => console.warn('report cleanup failed', e));
+      remove(ref(db, `reports/${key}`)).catch(() => {}); // best effort — rules allow only admins, others fail silently
     }
     catch (err) { console.error(err); toast('Delete failed.'); }
   }
@@ -592,11 +606,11 @@
 
   // ---------- History + live listener ----------
   const PAGE = 50;
-  let oldest = null; // { ts, key } of the oldest message currently loaded
+  let oldest = null;
 
   function toView(snap) {
     const v = snap.val() || {};
-    if (typeof v.text !== 'string' || typeof v.nick !== 'string') return null; // ignore malformed data
+    if (typeof v.text !== 'string' || typeof v.nick !== 'string') return null;
     const r = v.replyTo;
     const replyTo = r && typeof r.key === 'string' && typeof r.nick === 'string' && typeof r.text === 'string'
       ? { key: r.key.slice(0, 40), nick: r.nick.slice(0, NICK_MAX), text: r.text.slice(0, 100) } : null;
@@ -605,22 +619,27 @@
   }
   const track = (key, ts) => { if (!oldest || ts < oldest.ts) oldest = { ts, key }; };
 
-  // Last PAGE messages, then every new one. Older ones load on demand (bandwidth stays bounded).
   function listen() {
     const q = query(ref(db, base()), orderByChild('ts'), limitToLast(PAGE));
     stopMessages = onChildAdded(q, (snap) => {
       const key = snap.key;
-      if (els.has(key)) return;
+      const existing = els.get(key);
+      if (existing) {
+        // Confirmation of an optimistic render — clear pending and refresh cached text
+        existing.classList.remove('pending');
+        const m = toView(snap);
+        if (m) msgData.set(key, { nick: m.nick, text: m.text });
+        return;
+      }
       const m = toView(snap);
       if (!m) return;
       track(key, m.ts);
       msgData.set(key, { nick: m.nick, text: m.text });
       els.set(key, renderMessage({ ...m, key, state: pending.has(key) ? 'pending' : '' }));
     }, () => setStatus('disconnected', 'Cannot read messages'));
-    // child_removed also fires when the 50-message window slides, so confirm the message is really gone.
     const offRemoved = onChildRemoved(q, async (snap) => {
       const key = snap.key;
-      if (pending.has(key) || !els.has(key)) return; // rollback of our own failed write
+      if (pending.has(key) || !els.has(key)) return;
       try { if (!(await get(ref(db, base() + '/' + key))).exists()) dropElement(key); } catch { /* keep it */ }
     });
     const offChanged = onChildChanged(q, (snap) => {
@@ -649,14 +668,14 @@
       snap.forEach((c) => { const m = els.has(c.key) ? null : toView(c); if (m) items.push([c.key, m]); });
       const prevH = messagesEl.scrollHeight;
       const first = messagesEl.querySelector('.msg');
-      for (const [key, m] of items) {            // ascending order, each inserted before the first loaded message
+      for (const [key, m] of items) {
         msgData.set(key, { nick: m.nick, text: m.text });
         const el = buildMessage({ ...m, key });
         messagesEl.insertBefore(el, first);
         els.set(key, el);
         track(key, m.ts);
       }
-      messagesEl.scrollTop += messagesEl.scrollHeight - prevH; // keep the reader's place
+      messagesEl.scrollTop += messagesEl.scrollHeight - prevH;
       if (snap.size < PAGE) btn.hidden = true;
     } catch (err) {
       console.error(err);
@@ -699,13 +718,11 @@
       'auth/invalid-email': 'That email address is not valid.',
       'auth/email-already-in-use': 'That email already has an account. Use Sign in.',
       'auth/weak-password': 'Password must be at least 6 characters.',
-      'auth/missing-password': 'Enter your password.'
-    };
-    Object.assign(map, {
+      'auth/missing-password': 'Enter your password.',
       'auth/popup-closed-by-user': 'Sign-in was cancelled.',
       'auth/popup-blocked': 'Popup blocked. Allow popups and try again.',
       'auth/cancelled-popup-request': 'Sign-in was cancelled.'
-    });
+    };
     if (err.code === 'app/username') return err.message;
     if (err.code === 'app/taken') return 'That username is taken. Try another.';
     return map[err.code] || 'Could not join. Try again.';
@@ -714,7 +731,6 @@
   const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
   const fail = (m) => { throw Object.assign(new Error(m), { code: 'app/username' }); };
 
-  // Accounts get a unique username, claimed once; the rules make claims first-come, first-served.
   async function ensureUsername(user, preferred) {
     const existing = (await get(ref(db, `users/${user.uid}/username`))).val();
     if (existing) return existing;
@@ -727,6 +743,8 @@
   }
 
   async function enterChat(user, nick) {
+    if (entered) return;
+    entered = true;
     uid = user.uid;
     nickname = nick;
     $('me-name').textContent = nick;
@@ -751,6 +769,7 @@
     setJoining(true);
     try { await task(); }
     catch (err) {
+      entered = false;
       nickError.textContent = joinErrorMessage(err);
       if (auth.currentUser) await signOut(auth).catch(() => {});
     } finally { setJoining(false); }
@@ -763,8 +782,8 @@
         const r = validateNickname(nickInput.value);
         if (r.error) fail(r.error);
         const user = (await signInAnonymously(auth)).user;
-        // Guests can't use a name an account has claimed (the rules enforce this too).
         if ((await get(ref(db, 'usernames/' + r.value.toLowerCase()))).exists()) fail('That name belongs to an account. Pick another.');
+        try { localStorage.setItem('ac-nick-' + user.uid, r.value); } catch {}
         return enterChat(user, r.value);
       }
       const email = $('email').value.trim(), password = $('password').value;
@@ -774,7 +793,7 @@
         const user = (await createUserWithEmailAndPassword(auth, email, password)).user;
         let name;
         try { name = await ensureUsername(user, nickInput.value); }
-        catch (err) { await deleteUser(user).catch(() => {}); throw err; } // don't leave an account without a username
+        catch (err) { await deleteUser(user).catch(() => {}); throw err; }
         return enterChat(user, name);
       }
       const user = (await signInWithEmailAndPassword(auth, email, password)).user;
@@ -796,30 +815,101 @@
     } catch (err) { nickError.textContent = joinErrorMessage(err); }
   });
 
+  // ---------- Resume on reload ----------
+  if (auth) {
+    auth.onAuthStateChanged(async (user) => {
+      if (!user) { entered = false; return; }
+      if (entered) return;
+      try {
+        if (!user.isAnonymous) {
+          const name = (await get(ref(db, 'users/' + user.uid + '/username'))).val();
+          if (name) return enterChat(user, name);
+        }
+        if (user.isAnonymous) {
+          const cached = localStorage.getItem('ac-nick-' + user.uid);
+          if (cached) return enterChat(user, cached);
+        }
+      } catch (e) { console.error('resume failed', e); }
+    });
+  }
+
   // ---------- Send ----------
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
-    counter.textContent = `${msgInput.value.length} / ${MSG_MAX}`;
+    counter.textContent = msgInput.value.length === 0 ? '' : `${msgInput.value.length} / ${MSG_MAX}`;
   });
 
-  function markFailed(key, text) {
-    if (!uid) return; // already left
-    const el = els.get(key) ?? renderMessage({ nick: nickname, text, ts: Date.now(), mine: true });
-    els.set(key, el);
+  function markFailed(key, text, rt) {
+    if (!uid) return;
+    const el = els.get(key);
+    if (!el) { toast('A message failed to send'); return; }
     el.classList.remove('pending');
     el.classList.add('failed');
-    const f = document.createElement('span');
-    f.className = 'flag'; f.textContent = 'Failed to send';
-    el.querySelector('.meta').append(f);
+    if (!el.querySelector('.meta .flag')) {
+      const f = document.createElement('span');
+      f.className = 'flag'; f.textContent = 'Failed';
+      el.querySelector('.meta').append(f);
+    }
+    let actions = el.querySelector('.actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'actions';
+      el.append(actions);
+    }
+    actions.replaceChildren();
+    const mkBtn = (label, fn) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'act';
+      b.textContent = label;
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+      return b;
+    };
+    actions.append(
+      mkBtn('↻', () => retryMessage(key, text, rt)),
+      mkBtn('✕', () => dropElement(key))
+    );
+    failedMsgs.set(key, { text, rt });
+  }
+
+  async function retryMessage(key, text, rt) {
+    if (!uid) return;
+    const el = els.get(key);
+    if (!el) return;
+    el.classList.remove('failed');
+    el.classList.add('pending');
+    el.querySelector('.meta .flag')?.remove();
+    el.querySelector('.actions')?.replaceChildren();
+    failedMsgs.delete(key);
+
+    const path = base();
+    const msg = { uid, nick: nickname, text, ts: serverTimestamp() };
+    if (rt) msg.replyTo = rt;
+    const updates = { [`${path}/${key}`]: msg, [`lastPost/${uid}`]: serverTimestamp() };
+    if (room.type === 'dm') {
+      updates[`inbox/${uid}/${room.chatId}`] = { with: room.other, ts: serverTimestamp() };
+      updates[`inbox/${room.otherUid}/${room.chatId}`] = { with: nickname.toLowerCase(), ts: serverTimestamp() };
+    }
+    pending.add(key);
+    try {
+      await update(ref(db), updates);
+      pending.delete(key);
+      els.get(key)?.classList.remove('pending');
+    } catch (err) {
+      console.error(err);
+      pending.delete(key);
+      markFailed(key, text, rt);
+      toast('Retry failed. Wait a moment and try again.');
+    }
   }
 
   $('composer').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = msgInput.value.trim().replace(/\n{3,}/g, '\n\n');
     if (!text || text.length > MSG_MAX || !uid) return;
+
     const now = Date.now();
-    if (now - lastSend < SEND_COOLDOWN_MS) return; // basic accidental-repeat guard (client-side only)
+    if (now - lastSend < SEND_COOLDOWN_MS) { toast('Please wait a moment'); return; }
     lastSend = now;
     $('send-btn').disabled = true;
     setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
@@ -831,7 +921,7 @@
       if (unchanged) return;
       try {
         await update(ref(db), { [`${path}/${key}/text`]: text, [`${path}/${key}/edited`]: serverTimestamp(), [`lastPost/${uid}`]: serverTimestamp() });
-      } catch (err) { console.error(err); toast('Edit failed.'); }
+      } catch (err) { console.error(err); toast('Edit failed — wait a moment and try again.'); }
       return;
     }
 
@@ -839,15 +929,21 @@
     const rt = replyTo;
     const newRef = push(ref(db, path));
     const key = newRef.key;
+
+    // Optimistic render — visible immediately, cleared on server ack
     pending.add(key);
+    const optimisticEl = renderMessage({ nick: nickname, text, ts: now, mine: true, key, state: 'pending', replyTo: rt });
+    els.set(key, optimisticEl);
+    msgData.set(key, { nick: nickname, text });
     clearCtx(true);
     msgInput.focus();
+
     try {
       const msg = { uid, nick: nickname, text, ts: serverTimestamp() };
       if (rt) msg.replyTo = rt;
       const updates = {
         [`${path}/${key}`]: msg,
-        [`lastPost/${uid}`]: serverTimestamp() // rules require this in the same write
+        [`lastPost/${uid}`]: serverTimestamp()
       };
       if (sendRoom.type === 'dm') {
         updates[`inbox/${uid}/${sendRoom.chatId}`] = { with: sendRoom.other, ts: serverTimestamp() };
@@ -859,11 +955,11 @@
     } catch (err) {
       console.error(err);
       pending.delete(key);
-      markFailed(key, text);
+      markFailed(key, text, rt);
     }
   });
 
-  // ---------- Admin purge (rules only allow admins to delete) ----------
+  // ---------- Admin purge ----------
   $('purge-btn').addEventListener('click', async () => {
     if (!isAdmin || !confirm('Delete up to 500 messages older than 30 days?')) return;
     const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
@@ -871,7 +967,10 @@
       const snap = await get(query(ref(db, 'messages'), orderByChild('ts'), endBefore(cutoff), limitToFirst(500)));
       if (!snap.exists()) { toast('Nothing older than 30 days.'); return; }
       const updates = {};
-      snap.forEach((c) => { updates['messages/' + c.key] = null; });
+      snap.forEach((c) => {
+        updates['messages/' + c.key] = null;
+        updates['reports/' + c.key] = null;
+      });
       await update(ref(db), updates);
       snap.forEach((c) => dropElement(c.key));
       toast(`Deleted ${snap.size} messages.`);
@@ -918,16 +1017,21 @@
   $('ctx-cancel').addEventListener('click', () => clearCtx(editing !== null));
 
   // ---------- Composer niceties ----------
-  const finePointer = matchMedia('(pointer: fine)').matches;
   msgInput.addEventListener('keydown', (e) => {
-    if (finePointer && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('composer').requestSubmit(); }
+    if (e.isComposing) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (settings.enterToSend) {
+      if (e.key === 'Enter' && !e.shiftKey && !mod) { e.preventDefault(); $('composer').requestSubmit(); }
+    } else {
+      if (e.key === 'Enter' && mod) { e.preventDefault(); $('composer').requestSubmit(); }
+    }
   });
   messagesEl.addEventListener('scroll', () => {
     if (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80) $('jump-btn').hidden = true;
   });
   $('jump-btn').addEventListener('click', () => { messagesEl.scrollTop = messagesEl.scrollHeight; $('jump-btn').hidden = true; });
 
-  // ---------- Profile pictures (96px JPEG stored as a small data URL) ----------
+  // ---------- Profile pictures ----------
   const AVATAR_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
   function paintAll(u) {
     const url = avatarCache.get(u);
@@ -939,7 +1043,7 @@
   }
   function useAvatar(u, el) {
     if (avatarCache.has(u)) { if (avatarCache.get(u)) paintAll(u); return; }
-    avatarCache.set(u, null); // mark as requested
+    avatarCache.set(u, null);
     get(ref(db, 'avatars/' + u)).then((s) => { avatarCache.set(u, s.val() || null); paintAll(u); }).catch(() => {});
   }
   async function setAvatar(file) {
@@ -962,10 +1066,10 @@
     catch (e) { console.error(e); toast('Could not remove it.'); }
   });
 
-  // ---------- Settings (stored on this device only) ----------
+  // ---------- Settings ----------
   const ACCENTS = { mint: '#57d6a0', sky: '#5cb8ff', amber: '#f2b84b', rose: '#ff7a9c', violet: '#a98bff', coral: '#ff8a5c' };
   const FONTS = { patrick: ['Patrick Hand', 'Patrick+Hand'], kalam: ['Kalam', 'Kalam'], architects: ['Architects Daughter', 'Architects+Daughter'], clean: [null, null] };
-  const settings = { accent: 'mint', theme: 'ink', font: 'patrick' };
+  const settings = { accent: 'mint', theme: 'ink', font: 'patrick', enterToSend: matchMedia('(pointer: fine)').matches };
   function loadFont(k) {
     const [name, fam] = FONTS[k];
     if (!name || document.getElementById('font-' + k)) return;
@@ -985,6 +1089,7 @@
     document.querySelectorAll('[data-font]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.font === settings.font)));
     document.querySelectorAll('[data-accent]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.accent === settings.accent)));
     document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeOpt === settings.theme)));
+    document.querySelectorAll('[data-enter-opt]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.enterOpt === 'true') === settings.enterToSend)));
     try { localStorage.setItem('ac-settings', JSON.stringify(settings)); } catch { /* ignore */ }
   }
   document.querySelectorAll('[data-accent]').forEach((b) => {
@@ -993,12 +1098,21 @@
   });
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.addEventListener('click', () => { settings.theme = b.dataset.themeOpt; applySettings(); }));
   document.querySelectorAll('[data-font]').forEach((b) => b.addEventListener('click', () => { settings.font = b.dataset.font; applySettings(); }));
+  document.querySelectorAll('[data-enter-opt]').forEach((b) => b.addEventListener('click', () => { settings.enterToSend = b.dataset.enterOpt === 'true'; applySettings(); }));
   applySettings();
   $('settings-btn').addEventListener('click', () => { $('settings').hidden = false; });
   $('settings-close').addEventListener('click', () => { $('settings').hidden = true; });
   $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
 
-  // ---------- Sidebar: rooms and private chats ----------
+  // ---------- Escape closes modal / nav / reply-edit ----------
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('settings').hidden) { $('settings').hidden = true; return; }
+    if (document.body.classList.contains('nav-open')) { setNav(false); return; }
+    if (!$('ctx-bar').hidden) { clearCtx(editing !== null); return; }
+  });
+
+  // ---------- Sidebar ----------
   const setNav = (open) => document.body.classList.toggle('nav-open', open);
   $('menu-btn').addEventListener('click', () => setNav(true));
   $('scrim').addEventListener('click', () => setNav(false));
@@ -1018,7 +1132,7 @@
   }
   function openRoom(r) {
     stopMessages?.(); stopMessages = null; stopBlock?.(); stopBlock = null;
-    room = r; oldest = null; els.clear(); pending.clear(); msgData.clear(); clearCtx(true); resetMessages();
+    room = r; oldest = null; els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); clearCtx(true); resetMessages();
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages';
     const dm = r.type === 'dm';
     $('purge-btn').hidden = !(isAdmin && !dm);
@@ -1080,16 +1194,17 @@
     stopConnWatch?.(); stopConnWatch = null;
     stopReports?.(); stopReports = null; reported = new Set();
     stopInbox?.(); stopInbox = null; stopBlock?.(); stopBlock = null;
+    if (uid) { try { localStorage.removeItem('ac-nick-' + uid); } catch {} }
     room = { type: 'public' }; isAccount = false; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
-    uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true;
-    els.clear(); pending.clear(); msgData.clear(); clearCtx(true);
+    uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true; entered = false;
+    els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); clearCtx(true);
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
     resetMessages();
     showScreen('welcome');
     if (auth) await signOut(auth).catch(() => {});
   });
 
-  // ---------- Mobile keyboard handling ----------
+  // ---------- Mobile keyboard ----------
   if (window.visualViewport) {
     const fit = () => {
       document.documentElement.style.setProperty('--app-h', window.visualViewport.height + 'px');
