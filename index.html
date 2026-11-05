@@ -7,17 +7,17 @@
 <meta name="theme-color" content="#0e1113">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@500;700&display=swap">
 <style>
   :root {
     --bg: #0e1113; --rail: #0a0c0e; --panel: #14181b; --panel-2: #1b2024; --line: #242b30;
     --text: #e6ebee; --muted: #8a979f; --accent: #57d6a0; --accent-ink: #06140d; --danger: #f0766e;
-    --font: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+    --font: 'Patrick Hand', 'Segoe Print', 'Comic Sans MS', system-ui, sans-serif;
+    --mono: var(--font);
     --app-h: 100dvh; /* overwritten by JS when the keyboard opens */
   }
   * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font: 17px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   [hidden] { display: none !important; }
@@ -25,7 +25,7 @@
 
   /* ---------- Welcome ---------- */
   #welcome { align-items: center; justify-content: center; padding: 20px;
-    background: radial-gradient(900px 420px at 50% -10%, rgba(87,214,160,.10), transparent 60%), var(--bg); }
+    background: radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%), var(--bg); }
   .card { width: 100%; max-width: 420px; display: grid; gap: 16px; }
   #welcome > .card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 28px 24px; }
   .mark { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
@@ -76,7 +76,7 @@
   .right { display: flex; align-items: center; gap: 12px; }
   .status { display: inline-flex; align-items: center; gap: 6px; font: 500 .72rem var(--mono); color: var(--muted); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .status[data-state="connected"] .dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(87,214,160,.18); }
+  .status[data-state="connected"] .dot { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
   .status[data-state="connecting"] .dot, .status[data-state="reconnecting"] .dot { background: #d9b45a; }
   .status[data-state="disconnected"] .dot { background: var(--danger); }
   #older-btn { margin: 10px auto 0; font-size: .8rem; padding: 6px 14px; border-radius: 999px; }
@@ -87,7 +87,7 @@
   .msg { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding: 3px 16px; margin-top: 14px; }
   .msg.cont { margin-top: 0; }
   .msg:hover { background: rgba(255,255,255,.025); }
-  .msg.mine { background: rgba(87,214,160,.05); box-shadow: inset 2px 0 0 var(--accent); }
+  .msg.mine { background: color-mix(in srgb, var(--accent) 6%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
   .avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 800;
     background: hsl(var(--h, 150) 38% 22%); color: hsl(var(--h, 150) 80% 82%); user-select: none; }
   .msg.cont .avatar { visibility: hidden; height: 0; }
@@ -114,6 +114,45 @@
   @media (min-width: 880px) {
     .side { display: flex; }
     .bar .sub { display: none; }
+  }
+  /* ---------- Handwriting fonts, themes, drawer, settings ---------- */
+  :root { --display: 'Caveat', 'Patrick Hand', cursive; }
+  :root[data-theme="midnight"] { --bg: #0b0f1a; --rail: #080b14; --panel: #111729; --panel-2: #182036; --line: #222c47; }
+  :root[data-theme="charcoal"] { --bg: #161616; --rail: #101010; --panel: #1d1d1d; --panel-2: #262626; --line: #303030; }
+  .brand, .card h1, .bar h2, .name, .room, .sheet-title { font-family: var(--display); }
+  .card h1 { font-size: 2.4rem; font-weight: 700; }
+  .bar h2 { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+  .name { font-size: 1.25rem; font-weight: 700; }
+  .brand { font-size: 1.4rem; font-weight: 700; }
+  .sheet-title { font-size: 1.8rem; font-weight: 700; }
+  .time, .status, .counter { font-size: .85rem; }
+  .side-label, .you { font-size: .75rem; }
+  .link, .hint { font-size: .9rem; }
+  .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .icon { padding: 8px 12px; }
+  .titles { flex: 1; min-width: 0; }
+  #menu-btn { flex-shrink: 0; }
+  .side { display: flex; position: fixed; inset: 0 auto 0 0; z-index: 30; width: min(300px, 86vw); overflow-y: auto;
+    transform: translateX(-102%); transition: transform .2s; }
+  body.nav-open .side { transform: none; }
+  .scrim { display: none; }
+  body.nav-open .scrim { display: block; position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); }
+  .room { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; margin-bottom: 2px; font-size: 1.25rem; }
+  .room:hover, .room.active { background: var(--panel-2); }
+  .dm-form { display: flex; gap: 6px; margin: 8px 4px 0; }
+  .dm-form input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 16px; }
+  .dm-form input:focus { border-color: var(--accent); outline: none; }
+  .dm-form .btn { padding: 8px 12px; }
+  #dm-error { padding: 0 10px; min-height: 0; }
+  .modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.6); }
+  .sheet { width: 100%; max-width: 380px; display: grid; gap: 16px; padding: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; }
+  .swatches, .opts { display: flex; flex-wrap: wrap; gap: 10px; }
+  .sw { width: 36px; height: 36px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+  .sw[aria-pressed="true"] { border-color: var(--text); box-shadow: inset 0 0 0 3px var(--panel); }
+  @media (min-width: 880px) {
+    .side { position: static; transform: none; width: 252px; z-index: auto; }
+    #menu-btn { display: none; }
+    body.nav-open .scrim { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -156,24 +195,39 @@
 
 <!-- Screen 2: Chat -->
 <section id="chat" class="screen" hidden>
-  <aside class="side" aria-label="Rooms">
+  <aside class="side" id="side" aria-label="Navigation">
     <div class="brand"><span class="mark" aria-hidden="true">//</span>Anonymous Chat</div>
     <div class="side-label">Rooms</div>
-    <div class="room" aria-current="true"><span class="hash">/</span>public</div>
+    <button type="button" class="room active" id="room-public"><span class="hash">/</span>public</button>
+    <div id="dm-section" hidden>
+      <div class="side-label">Private</div>
+      <div id="dm-list"></div>
+      <form id="dm-form" class="dm-form" novalidate>
+        <label for="dm-input" style="position:absolute;left:-9999px">Username</label>
+        <input id="dm-input" type="text" maxlength="20" autocomplete="off" placeholder="username">
+        <button type="submit" class="btn">Chat</button>
+      </form>
+      <p id="dm-error" class="error"></p>
+    </div>
+    <p id="dm-guest-note" class="hint" hidden style="padding:8px 10px">Create an account to send private messages.</p>
     <div class="grow"></div>
     <div class="me">
       <div class="avatar" id="me-avatar" aria-hidden="true"></div>
-      <div id="me-name-2" class="me-name"></div>
+      <div id="me-name-2" class="me-name" style="flex:1"></div>
+      <button type="button" id="settings-btn" class="btn icon" aria-label="Settings">⚙</button>
     </div>
   </aside>
+  <div class="scrim" id="scrim"></div>
 
   <div class="main">
     <header class="bar">
-      <div>
-        <h2><span class="hash">/</span>public</h2>
+      <button type="button" id="menu-btn" class="btn icon" aria-label="Open menu">☰</button>
+      <div class="titles">
+        <h2 id="room-title"><span class="hash">/</span>public</h2>
         <div class="sub">Open room · <span id="me-name"></span></div>
       </div>
       <div class="right">
+        <button type="button" id="block-btn" class="btn" hidden>Block</button>
         <span id="status" class="status" data-state="connecting" aria-live="polite">
           <span class="dot"></span><span id="status-text">Connecting…</span>
         </span>
@@ -195,6 +249,29 @@
     </form>
   </div>
 </section>
+
+<div id="settings" class="modal" hidden>
+  <div class="sheet" role="dialog" aria-label="Settings">
+    <h3 class="sheet-title">Settings</h3>
+    <div><label>Accent colour</label>
+      <div class="swatches">
+        <button type="button" class="sw" data-accent="mint" aria-label="Mint"></button>
+        <button type="button" class="sw" data-accent="sky" aria-label="Sky"></button>
+        <button type="button" class="sw" data-accent="amber" aria-label="Amber"></button>
+        <button type="button" class="sw" data-accent="rose" aria-label="Rose"></button>
+        <button type="button" class="sw" data-accent="violet" aria-label="Violet"></button>
+        <button type="button" class="sw" data-accent="coral" aria-label="Coral"></button>
+      </div></div>
+    <div><label>Background</label>
+      <div class="opts">
+        <button type="button" class="btn" data-theme-opt="ink">Ink</button>
+        <button type="button" class="btn" data-theme-opt="midnight">Midnight</button>
+        <button type="button" class="btn" data-theme-opt="charcoal">Charcoal</button>
+      </div></div>
+    <p class="hint">Saved on this device only.</p>
+    <button type="button" id="settings-close" class="btn primary">Done</button>
+  </div>
+</div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -231,6 +308,8 @@
   // ---------- State ----------
   let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false, stopReports = null, reported = new Set();
   let stopConnWatch = null, stopMessages = null;
+  let room = { type: 'public' }, stopInbox = null, stopBlock = null, isAccount = false;
+  const base = () => (room.type === 'dm' ? `dms/${room.chatId}/messages` : 'messages');
   let lastMsg = null; // previous rendered message, for grouping consecutive posts
   const els = new Map();     // message key -> DOM element
   const pending = new Set(); // keys of messages we sent that the server hasn't confirmed
@@ -291,7 +370,7 @@
     bubble.textContent = text;
     body.append(meta, bubble);
     wrap.append(avatar, body);
-    if (key) {
+    if (key && room.type === 'public') {
       const addLink = (label, fn) => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'link'; b.textContent = label;
@@ -340,7 +419,7 @@
   async function deleteMessage(key) {
     if (!confirm('Delete this message for everyone?')) return;
     try {
-      await remove(ref(db, `messages/${key}`));
+      await remove(ref(db, `${base()}/${key}`));
       dropElement(key);
       // Admins also clear the message's reports; best effort, so a rules problem here never blocks the delete.
       if (isAdmin) remove(ref(db, `reports/${key}`)).catch((e) => console.warn('report cleanup failed', e));
@@ -402,7 +481,7 @@
 
   // Last PAGE messages, then every new one. Older ones load on demand (bandwidth stays bounded).
   function listen() {
-    const q = query(ref(db, 'messages'), orderByChild('ts'), limitToLast(PAGE));
+    const q = query(ref(db, base()), orderByChild('ts'), limitToLast(PAGE));
     stopMessages = onChildAdded(q, (snap) => {
       const key = snap.key;
       if (els.has(key)) return;
@@ -415,7 +494,7 @@
     const offRemoved = onChildRemoved(q, async (snap) => {
       const key = snap.key;
       if (pending.has(key) || !els.has(key)) return; // rollback of our own failed write
-      try { if (!(await get(ref(db, 'messages/' + key))).exists()) dropElement(key); } catch { /* keep it */ }
+      try { if (!(await get(ref(db, base() + '/' + key))).exists()) dropElement(key); } catch { /* keep it */ }
     });
     const offAdded = stopMessages;
     stopMessages = () => { offAdded(); offRemoved(); };
@@ -427,7 +506,7 @@
     const btn = $('older-btn');
     btn.disabled = true;
     try {
-      const snap = await get(query(ref(db, 'messages'), orderByChild('ts'), endBefore(oldest.ts, oldest.key), limitToLast(PAGE)));
+      const snap = await get(query(ref(db, base()), orderByChild('ts'), endBefore(oldest.ts, oldest.key), limitToLast(PAGE)));
       const items = [];
       snap.forEach((c) => { const m = els.has(c.key) ? null : toView(c); if (m) items.push([c.key, m]); });
       const prevH = messagesEl.scrollHeight;
@@ -515,12 +594,14 @@
     $('me-name-2').textContent = nick;
     $('me-avatar').textContent = initialOf(nick);
     $('me-avatar').style.setProperty('--h', hueOf(nick));
+    isAccount = !user.isAnonymous;
     isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
     $('purge-btn').hidden = !isAdmin;
     if (isAdmin) watchReports();
     showScreen('chat');
     watchConnection();
     listen();
+    setupSidebar();
   }
 
   async function startJoin(task) {
@@ -601,17 +682,23 @@
     $('send-btn').disabled = true;
     setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
 
-    const newRef = push(ref(db, 'messages'));
+    const sendRoom = room, path = base();
+    const newRef = push(ref(db, path));
     const key = newRef.key;
     pending.add(key);
     msgInput.value = '';
     counter.textContent = `0 / ${MSG_MAX}`;
     msgInput.focus();
     try {
-      await update(ref(db), {
-        [`messages/${key}`]: { uid, nick: nickname, text, ts: serverTimestamp() },
+      const updates = {
+        [`${path}/${key}`]: { uid, nick: nickname, text, ts: serverTimestamp() },
         [`lastPost/${uid}`]: serverTimestamp() // rules require this in the same write
-      });
+      };
+      if (sendRoom.type === 'dm') {
+        updates[`inbox/${uid}/${sendRoom.chatId}`] = { with: sendRoom.other, ts: serverTimestamp() };
+        updates[`inbox/${sendRoom.otherUid}/${sendRoom.chatId}`] = { with: nickname.toLowerCase(), ts: serverTimestamp() };
+      }
+      await update(ref(db), updates);
       pending.delete(key);
       els.get(key)?.classList.remove('pending');
     } catch (err) {
@@ -636,11 +723,109 @@
     } catch (err) { console.error(err); alert('Purge failed.'); }
   });
 
+  // ---------- Settings (stored on this device only) ----------
+  const ACCENTS = { mint: '#57d6a0', sky: '#5cb8ff', amber: '#f2b84b', rose: '#ff7a9c', violet: '#a98bff', coral: '#ff8a5c' };
+  const settings = { accent: 'mint', theme: 'ink' };
+  try { Object.assign(settings, JSON.parse(localStorage.getItem('ac-settings') || '{}')); } catch { /* defaults */ }
+  function applySettings() {
+    document.documentElement.style.setProperty('--accent', ACCENTS[settings.accent] || ACCENTS.mint);
+    document.documentElement.dataset.theme = settings.theme;
+    document.querySelectorAll('[data-accent]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.accent === settings.accent)));
+    document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeOpt === settings.theme)));
+    try { localStorage.setItem('ac-settings', JSON.stringify(settings)); } catch { /* ignore */ }
+  }
+  document.querySelectorAll('[data-accent]').forEach((b) => {
+    b.style.background = ACCENTS[b.dataset.accent];
+    b.addEventListener('click', () => { settings.accent = b.dataset.accent; applySettings(); });
+  });
+  document.querySelectorAll('[data-theme-opt]').forEach((b) => b.addEventListener('click', () => { settings.theme = b.dataset.themeOpt; applySettings(); }));
+  applySettings();
+  $('settings-btn').addEventListener('click', () => { $('settings').hidden = false; });
+  $('settings-close').addEventListener('click', () => { $('settings').hidden = true; });
+  $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
+
+  // ---------- Sidebar: rooms and private chats ----------
+  const setNav = (open) => document.body.classList.toggle('nav-open', open);
+  $('menu-btn').addEventListener('click', () => setNav(true));
+  $('scrim').addEventListener('click', () => setNav(false));
+
+  function setHeader(prefix, name) {
+    const h = document.createElement('span');
+    h.className = 'hash'; h.textContent = prefix;
+    $('room-title').replaceChildren(h, name);
+    msgInput.placeholder = 'Message ' + prefix + name;
+  }
+  function highlightRooms() {
+    $('room-public').classList.toggle('active', room.type === 'public');
+    document.querySelectorAll('#dm-list .room').forEach((b) => b.classList.toggle('active', room.type === 'dm' && b.dataset.chat === room.chatId));
+  }
+  function watchBlock() {
+    stopBlock = onValue(ref(db, `blocks/${uid}/${room.otherUid}`), (s) => { $('block-btn').textContent = s.exists() ? 'Unblock' : 'Block'; }, () => {});
+  }
+  function openRoom(r) {
+    stopMessages?.(); stopMessages = null; stopBlock?.(); stopBlock = null;
+    room = r; oldest = null; els.clear(); pending.clear(); resetMessages();
+    $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages';
+    const dm = r.type === 'dm';
+    $('purge-btn').hidden = !(isAdmin && !dm);
+    $('block-btn').hidden = !dm;
+    if (dm) { setHeader('@', r.other); watchBlock(); } else setHeader('/', 'public');
+    highlightRooms();
+    setNav(false);
+    listen();
+  }
+  async function openDm(raw) {
+    const name = raw.trim().toLowerCase(), err = $('dm-error');
+    err.textContent = '';
+    if (!USERNAME_RE.test(name)) { err.textContent = 'Enter a username (a–z, 0–9, _).'; return; }
+    try {
+      const otherUid = (await get(ref(db, 'usernames/' + name))).val();
+      if (!otherUid) { err.textContent = 'No account with that username.'; return; }
+      if (otherUid === uid) { err.textContent = "That's you."; return; }
+      openRoom({ type: 'dm', chatId: [uid, otherUid].sort().join('_'), other: name, otherUid });
+    } catch (e) { console.error(e); err.textContent = 'Could not open that chat.'; }
+  }
+  function watchInbox() {
+    stopInbox = onValue(ref(db, 'inbox/' + uid), (snap) => {
+      const items = Object.entries(snap.val() || {}).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+      $('dm-list').replaceChildren(...items.map(([chatId, v]) => {
+        const name = String(v.with || '').slice(0, 24);
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'room'; b.dataset.chat = chatId;
+        const h = document.createElement('span');
+        h.className = 'hash'; h.textContent = '@';
+        b.append(h, name);
+        b.addEventListener('click', () => openDm(name));
+        return b;
+      }));
+      highlightRooms();
+    }, () => {});
+  }
+  function setupSidebar() {
+    room = { type: 'public' };
+    setHeader('/', 'public');
+    $('block-btn').hidden = true;
+    $('dm-section').hidden = !isAccount;
+    $('dm-guest-note').hidden = isAccount;
+    highlightRooms();
+    if (isAccount) watchInbox();
+  }
+  $('room-public').addEventListener('click', () => { if (room.type !== 'public') openRoom({ type: 'public' }); else setNav(false); });
+  $('dm-form').addEventListener('submit', (e) => { e.preventDefault(); openDm($('dm-input').value); $('dm-input').value = ''; });
+  $('block-btn').addEventListener('click', async () => {
+    if (room.type !== 'dm') return;
+    const r = ref(db, `blocks/${uid}/${room.otherUid}`);
+    try { if ((await get(r)).exists()) await remove(r); else await set(r, true); }
+    catch (e) { console.error(e); alert('Could not update block.'); }
+  });
+
   // ---------- Leave ----------
   $('leave-btn').addEventListener('click', async () => {
     stopMessages?.(); stopMessages = null;
     stopConnWatch?.(); stopConnWatch = null;
     stopReports?.(); stopReports = null; reported = new Set();
+    stopInbox?.(); stopInbox = null; stopBlock?.(); stopBlock = null;
+    room = { type: 'public' }; isAccount = false; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
     uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true;
     els.clear(); pending.clear();
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
