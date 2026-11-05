@@ -154,6 +154,26 @@
     #menu-btn { display: none; }
     body.nav-open .scrim { display: none; }
   }
+  .body { min-width: 0; }
+  .main { position: relative; }
+  .quote { display: block; width: 100%; text-align: left; margin: 2px 0 4px; padding: 4px 10px; border: 0; border-left: 3px solid var(--accent);
+    border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--muted); cursor: pointer;
+    font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .quote b { color: var(--text); font-weight: 700; }
+  .edited { color: var(--muted); font-size: .78rem; }
+  .msg.flash { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .ctxbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 16px 6px; padding: 6px 12px;
+    background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 10px; color: var(--muted); font-size: .92rem; }
+  #ctx-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .avatar.photo { background-size: cover; background-position: center; color: transparent; }
+  .day { display: flex; align-items: center; gap: 12px; margin: 18px 16px 4px; color: var(--muted); font-size: .85rem; }
+  .day::before, .day::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  #jump-btn { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 5; border-radius: 999px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
+  .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 60; max-width: 90vw; padding: 10px 16px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  form.composer textarea { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 0; outline: none; resize: none;
+    max-height: 120px; font: inherit; font-size: 17px; line-height: 1.35; }
+  .sheet { max-height: 90dvh; overflow-y: auto; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -241,18 +261,34 @@
       <p class="empty" id="empty-note">No messages yet. Say hello.</p>
     </div>
 
+    <div id="ctx-bar" class="ctxbar" hidden><span id="ctx-text"></span><button type="button" id="ctx-cancel" class="link" aria-label="Cancel">✕</button></div>
+    <button type="button" id="jump-btn" class="btn" hidden>↓ New messages</button>
     <div id="counter" class="counter">0 / 500</div>
     <form id="composer" class="composer" novalidate>
       <label for="msg-input" style="position:absolute;left:-9999px">Message</label>
-      <input id="msg-input" type="text" autocomplete="off" placeholder="Message /public">
+      <textarea id="msg-input" rows="1" autocomplete="off" placeholder="Message /public"></textarea>
       <button type="submit" id="send-btn" class="btn primary">Send</button>
     </form>
   </div>
 </section>
 
+<div id="toast" class="toast" role="status" hidden></div>
 <div id="settings" class="modal" hidden>
   <div class="sheet" role="dialog" aria-label="Settings">
     <h3 class="sheet-title">Settings</h3>
+    <div id="avatar-section" hidden><label>Profile picture</label>
+      <div class="opts">
+        <input type="file" id="avatar-file" accept="image/*" hidden>
+        <button type="button" class="btn" id="avatar-pick">Choose photo</button>
+        <button type="button" class="btn" id="avatar-remove">Remove</button>
+      </div></div>
+    <div><label>Font</label>
+      <div class="opts">
+        <button type="button" class="btn" data-font="patrick">Handwritten</button>
+        <button type="button" class="btn" data-font="kalam">Casual</button>
+        <button type="button" class="btn" data-font="architects">Sketch</button>
+        <button type="button" class="btn" data-font="clean">Clean</button>
+      </div></div>
     <div><label>Accent colour</label>
       <div class="swatches">
         <button type="button" class="sw" data-accent="mint" aria-label="Mint"></button>
@@ -276,7 +312,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, signInAnonymously, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, limitToFirst, endBefore, get, update, remove, onChildAdded, onChildRemoved, serverTimestamp }
+  import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, limitToFirst, endBefore, get, update, remove, onChildAdded, onChildRemoved, onChildChanged, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
   // ---------- Firebase config (public by design; security lives in the database rules) ----------
@@ -309,6 +345,9 @@
   let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false, stopReports = null, reported = new Set();
   let stopConnWatch = null, stopMessages = null;
   let room = { type: 'public' }, stopInbox = null, stopBlock = null, isAccount = false;
+  let replyTo = null, editing = null, lastDay = '';
+  const msgData = new Map();     // key -> { nick, text } for loaded messages (reply quotes, edits)
+  const avatarCache = new Map(); // uid -> data URL or null
   const base = () => (room.type === 'dm' ? `dms/${room.chatId}/messages` : 'messages');
   let lastMsg = null; // previous rendered message, for grouping consecutive posts
   const els = new Map();     // message key -> DOM element
@@ -347,13 +386,15 @@
   const initialOf = (s) => (Array.from(s)[0] || '?').toUpperCase();
 
   // Always textContent, never innerHTML, for user-supplied strings.
-  function buildMessage({ key, nick, text, ts, mine, state, cont }) {
+  function buildMessage({ key, uid: authorUid, nick, text, ts, mine, state, cont, edited, replyTo: rt }) {
     const wrap = document.createElement('div');
     wrap.className = 'msg' + (mine ? ' mine' : '') + (cont ? ' cont' : '') + (state ? ' ' + state : '');
     wrap.style.setProperty('--h', hueOf(nick));
+    if (key) wrap.dataset.key = key;
     const avatar = document.createElement('div');
     avatar.className = 'avatar'; avatar.setAttribute('aria-hidden', 'true');
-    avatar.textContent = initialOf(nick);
+    avatar.textContent = initialOf(nick); avatar.dataset.initial = initialOf(nick);
+    if (authorUid) { avatar.dataset.uid = authorUid; useAvatar(authorUid, avatar); }
     const body = document.createElement('div');
     body.className = 'body';
     const meta = document.createElement('div');
@@ -365,21 +406,37 @@
     const time = document.createElement('span');
     time.className = 'time'; time.textContent = formatTime(ts);
     meta.append(time);
+    if (edited) { const t = document.createElement('span'); t.className = 'edited'; t.textContent = '(edited)'; meta.append(t); }
+    body.append(meta);
+    if (rt) {
+      const q = document.createElement('button');
+      q.type = 'button'; q.className = 'quote';
+      const live = msgData.get(rt.key) || rt; // prefer the real message over the sender-supplied snapshot
+      const qn = document.createElement('b');
+      qn.textContent = live.nick;
+      q.append(qn, ' ' + live.text.slice(0, 100));
+      q.addEventListener('click', () => jumpTo(rt.key));
+      body.append(q);
+    }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.textContent = text;
-    body.append(meta, bubble);
+    body.append(bubble);
     wrap.append(avatar, body);
-    if (key && room.type === 'public') {
+    if (key) {
       const addLink = (label, fn) => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'link'; b.textContent = label;
         b.addEventListener('click', fn);
         meta.append(b);
       };
-      if (mine || isAdmin) addLink('Delete', () => deleteMessage(key));
-      if (!mine && !isAdmin) addLink('Report', () => reportMessage(key, nick, text));
-      if (isAdmin && reported.has(key)) meta.append(makeFlag());
+      addLink('Reply', () => startReply(key, nick, text));
+      if (mine) addLink('Edit', () => startEdit(key));
+      if (room.type === 'public') {
+        if (mine || isAdmin) addLink('Delete', () => deleteMessage(key));
+        if (!mine && !isAdmin) addLink('Report', () => reportMessage(key, nick, text));
+        if (isAdmin && reported.has(key)) meta.append(makeFlag());
+      }
     }
     return wrap;
   }
@@ -407,10 +464,10 @@
     if (!confirm('Report this message to the admin?')) return;
     try {
       await set(ref(db, `reports/${key}/${uid}`), { nick, text, ts: serverTimestamp() });
-      alert('Reported. Thank you.');
+      toast('Reported. Thank you.');
     } catch (err) {
       console.error(err);
-      alert(err.code === 'PERMISSION_DENIED' ? 'You already reported this message.' : 'Report failed.');
+      toast(err.code === 'PERMISSION_DENIED' ? 'You already reported this message.' : 'Report failed.');
     }
   }
 
@@ -424,11 +481,24 @@
       // Admins also clear the message's reports; best effort, so a rules problem here never blocks the delete.
       if (isAdmin) remove(ref(db, `reports/${key}`)).catch((e) => console.warn('report cleanup failed', e));
     }
-    catch (err) { console.error(err); alert('Delete failed.'); }
+    catch (err) { console.error(err); toast('Delete failed.'); }
+  }
+
+  function dayLabel(ts) {
+    const d = new Date(ts), t = new Date();
+    const diff = Math.round((new Date(t.getFullYear(), t.getMonth(), t.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function renderMessage(m) {
     $('empty-note')?.remove();
+    const day = new Date(m.ts).toDateString();
+    if (day !== lastDay) {
+      lastDay = day;
+      const d = document.createElement('div');
+      d.className = 'day'; d.textContent = dayLabel(m.ts);
+      messagesEl.appendChild(d);
+    }
     const prev = messagesEl.lastElementChild;
     const cont = !!(lastMsg && prev?.classList.contains('msg') && lastMsg.nick === m.nick && lastMsg.mine === m.mine
       && m.ts >= lastMsg.ts && m.ts - lastMsg.ts < 5 * 60 * 1000);
@@ -437,11 +507,12 @@
     const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
     messagesEl.appendChild(wrap);
     if (m.mine || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+    else $('jump-btn').hidden = false;
     return wrap;
   }
 
   function resetMessages() {
-    lastMsg = null;
+    lastMsg = null; lastDay = ''; $('jump-btn').hidden = true;
     messagesEl.replaceChildren();
     const note = document.createElement('p');
     note.className = 'empty'; note.id = 'empty-note';
@@ -475,7 +546,11 @@
   function toView(snap) {
     const v = snap.val() || {};
     if (typeof v.text !== 'string' || typeof v.nick !== 'string') return null; // ignore malformed data
-    return { nick: v.nick.slice(0, NICK_MAX), text: v.text.slice(0, MSG_MAX), ts: Number(v.ts) || Date.now(), mine: v.uid === uid };
+    const r = v.replyTo;
+    const replyTo = r && typeof r.key === 'string' && typeof r.nick === 'string' && typeof r.text === 'string'
+      ? { key: r.key.slice(0, 40), nick: r.nick.slice(0, NICK_MAX), text: r.text.slice(0, 100) } : null;
+    return { uid: typeof v.uid === 'string' ? v.uid : null, nick: v.nick.slice(0, NICK_MAX), text: v.text.slice(0, MSG_MAX),
+      ts: Number(v.ts) || Date.now(), mine: v.uid === uid, edited: Number(v.edited) || 0, replyTo };
   }
   const track = (key, ts) => { if (!oldest || ts < oldest.ts) oldest = { ts, key }; };
 
@@ -488,6 +563,7 @@
       const m = toView(snap);
       if (!m) return;
       track(key, m.ts);
+      msgData.set(key, { nick: m.nick, text: m.text });
       els.set(key, renderMessage({ ...m, key, state: pending.has(key) ? 'pending' : '' }));
     }, () => setStatus('disconnected', 'Cannot read messages'));
     // child_removed also fires when the 50-message window slides, so confirm the message is really gone.
@@ -496,8 +572,19 @@
       if (pending.has(key) || !els.has(key)) return; // rollback of our own failed write
       try { if (!(await get(ref(db, base() + '/' + key))).exists()) dropElement(key); } catch { /* keep it */ }
     });
+    const offChanged = onChildChanged(q, (snap) => {
+      const m = toView(snap), el = els.get(snap.key);
+      if (!m || !el) return;
+      msgData.set(snap.key, { nick: m.nick, text: m.text });
+      el.querySelector('.bubble').textContent = m.text;
+      if (m.edited && !el.querySelector('.edited')) {
+        const t = document.createElement('span');
+        t.className = 'edited'; t.textContent = '(edited)';
+        el.querySelector('.time').after(t);
+      }
+    });
     const offAdded = stopMessages;
-    stopMessages = () => { offAdded(); offRemoved(); };
+    stopMessages = () => { offAdded(); offRemoved(); offChanged(); };
     $('older-btn').hidden = false;
   }
 
@@ -512,6 +599,7 @@
       const prevH = messagesEl.scrollHeight;
       const first = messagesEl.querySelector('.msg');
       for (const [key, m] of items) {            // ascending order, each inserted before the first loaded message
+        msgData.set(key, { nick: m.nick, text: m.text });
         const el = buildMessage({ ...m, key });
         messagesEl.insertBefore(el, first);
         els.set(key, el);
@@ -594,6 +682,7 @@
     $('me-name-2').textContent = nick;
     $('me-avatar').textContent = initialOf(nick);
     $('me-avatar').style.setProperty('--h', hueOf(nick));
+    $('me-avatar').dataset.uid = uid; $('me-avatar').dataset.initial = initialOf(nick); useAvatar(uid, $('me-avatar'));
     isAccount = !user.isAnonymous;
     isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
     $('purge-btn').hidden = !isAdmin;
@@ -658,6 +747,8 @@
 
   // ---------- Send ----------
   msgInput.addEventListener('input', () => {
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
     counter.textContent = `${msgInput.value.length} / ${MSG_MAX}`;
   });
 
@@ -674,7 +765,7 @@
 
   $('composer').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const text = msgInput.value.trim();
+    const text = msgInput.value.trim().replace(/\n{3,}/g, '\n\n');
     if (!text || text.length > MSG_MAX || !uid) return;
     const now = Date.now();
     if (now - lastSend < SEND_COOLDOWN_MS) return; // basic accidental-repeat guard (client-side only)
@@ -682,16 +773,29 @@
     $('send-btn').disabled = true;
     setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
 
+    if (editing) {
+      const { key, path } = editing;
+      const unchanged = msgData.get(key)?.text === text;
+      clearCtx(true);
+      if (unchanged) return;
+      try {
+        await update(ref(db), { [`${path}/${key}/text`]: text, [`${path}/${key}/edited`]: serverTimestamp(), [`lastPost/${uid}`]: serverTimestamp() });
+      } catch (err) { console.error(err); toast('Edit failed.'); }
+      return;
+    }
+
     const sendRoom = room, path = base();
+    const rt = replyTo;
     const newRef = push(ref(db, path));
     const key = newRef.key;
     pending.add(key);
-    msgInput.value = '';
-    counter.textContent = `0 / ${MSG_MAX}`;
+    clearCtx(true);
     msgInput.focus();
     try {
+      const msg = { uid, nick: nickname, text, ts: serverTimestamp() };
+      if (rt) msg.replyTo = rt;
       const updates = {
-        [`${path}/${key}`]: { uid, nick: nickname, text, ts: serverTimestamp() },
+        [`${path}/${key}`]: msg,
         [`lastPost/${uid}`]: serverTimestamp() // rules require this in the same write
       };
       if (sendRoom.type === 'dm') {
@@ -714,22 +818,120 @@
     const cutoff = Date.now() - 30 * 24 * 3600 * 1000;
     try {
       const snap = await get(query(ref(db, 'messages'), orderByChild('ts'), endBefore(cutoff), limitToFirst(500)));
-      if (!snap.exists()) { alert('Nothing older than 30 days.'); return; }
+      if (!snap.exists()) { toast('Nothing older than 30 days.'); return; }
       const updates = {};
       snap.forEach((c) => { updates['messages/' + c.key] = null; });
       await update(ref(db), updates);
       snap.forEach((c) => dropElement(c.key));
-      alert(`Deleted ${snap.size} messages.`);
-    } catch (err) { console.error(err); alert('Purge failed.'); }
+      toast(`Deleted ${snap.size} messages.`);
+    } catch (err) { console.error(err); toast('Purge failed.'); }
+  });
+
+  // ---------- Toasts ----------
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { t.hidden = true; }, 3000);
+  }
+
+  // ---------- Reply and edit ----------
+  function showBar(text) { $('ctx-text').textContent = text; $('ctx-bar').hidden = false; }
+  function clearCtx(clearInput) {
+    replyTo = null; editing = null; $('ctx-bar').hidden = true;
+    if (clearInput) { msgInput.value = ''; msgInput.dispatchEvent(new Event('input')); }
+  }
+  function startReply(key, nick, text) {
+    clearCtx(false);
+    replyTo = { key, nick, text: (msgData.get(key)?.text ?? text).slice(0, 100) };
+    showBar(`Replying to ${nick}: ${replyTo.text}`);
+    msgInput.focus();
+  }
+  function startEdit(key) {
+    const cur = msgData.get(key);
+    if (!cur) return;
+    clearCtx(false);
+    editing = { key, path: base() };
+    msgInput.value = cur.text;
+    msgInput.dispatchEvent(new Event('input'));
+    showBar('Editing message');
+    msgInput.focus();
+  }
+  function jumpTo(key) {
+    const el = els.get(key);
+    if (!el) { toast('That message is not loaded.'); return; }
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1200);
+  }
+  $('ctx-cancel').addEventListener('click', () => clearCtx(editing !== null));
+
+  // ---------- Composer niceties ----------
+  const finePointer = matchMedia('(pointer: fine)').matches;
+  msgInput.addEventListener('keydown', (e) => {
+    if (finePointer && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('composer').requestSubmit(); }
+  });
+  messagesEl.addEventListener('scroll', () => {
+    if (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80) $('jump-btn').hidden = true;
+  });
+  $('jump-btn').addEventListener('click', () => { messagesEl.scrollTop = messagesEl.scrollHeight; $('jump-btn').hidden = true; });
+
+  // ---------- Profile pictures (96px JPEG stored as a small data URL) ----------
+  const AVATAR_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
+  function paintAll(u) {
+    const url = avatarCache.get(u);
+    document.querySelectorAll('.avatar[data-uid]').forEach((el) => {
+      if (el.dataset.uid !== u) return;
+      if (url && AVATAR_RE.test(url)) { el.style.backgroundImage = `url("${url}")`; el.classList.add('photo'); el.textContent = ''; }
+      else { el.style.backgroundImage = ''; el.classList.remove('photo'); el.textContent = el.dataset.initial || '?'; }
+    });
+  }
+  function useAvatar(u, el) {
+    if (avatarCache.has(u)) { if (avatarCache.get(u)) paintAll(u); return; }
+    avatarCache.set(u, null); // mark as requested
+    get(ref(db, 'avatars/' + u)).then((s) => { avatarCache.set(u, s.val() || null); paintAll(u); }).catch(() => {});
+  }
+  async function setAvatar(file) {
+    try {
+      const bmp = await createImageBitmap(file);
+      const c = document.createElement('canvas');
+      c.width = c.height = 96;
+      const s = Math.min(bmp.width, bmp.height);
+      c.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 96, 96);
+      const url = c.toDataURL('image/jpeg', 0.8);
+      await set(ref(db, 'avatars/' + uid), url);
+      avatarCache.set(uid, url); paintAll(uid);
+      toast('Profile picture updated.');
+    } catch (e) { console.error(e); toast('Could not use that image.'); }
+  }
+  $('avatar-pick').addEventListener('click', () => $('avatar-file').click());
+  $('avatar-file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) setAvatar(f); });
+  $('avatar-remove').addEventListener('click', async () => {
+    try { await remove(ref(db, 'avatars/' + uid)); avatarCache.set(uid, null); paintAll(uid); toast('Profile picture removed.'); }
+    catch (e) { console.error(e); toast('Could not remove it.'); }
   });
 
   // ---------- Settings (stored on this device only) ----------
   const ACCENTS = { mint: '#57d6a0', sky: '#5cb8ff', amber: '#f2b84b', rose: '#ff7a9c', violet: '#a98bff', coral: '#ff8a5c' };
-  const settings = { accent: 'mint', theme: 'ink' };
+  const FONTS = { patrick: ['Patrick Hand', 'Patrick+Hand'], kalam: ['Kalam', 'Kalam'], architects: ['Architects Daughter', 'Architects+Daughter'], clean: [null, null] };
+  const settings = { accent: 'mint', theme: 'ink', font: 'patrick' };
+  function loadFont(k) {
+    const [name, fam] = FONTS[k];
+    if (!name || document.getElementById('font-' + k)) return;
+    const l = document.createElement('link');
+    l.id = 'font-' + k; l.rel = 'stylesheet'; l.href = `https://fonts.googleapis.com/css2?family=${fam}&display=swap`;
+    document.head.appendChild(l);
+  }
   try { Object.assign(settings, JSON.parse(localStorage.getItem('ac-settings') || '{}')); } catch { /* defaults */ }
   function applySettings() {
     document.documentElement.style.setProperty('--accent', ACCENTS[settings.accent] || ACCENTS.mint);
     document.documentElement.dataset.theme = settings.theme;
+    if (!FONTS[settings.font]) settings.font = 'patrick';
+    loadFont(settings.font);
+    document.documentElement.style.setProperty('--font', FONTS[settings.font][0]
+      ? `'${FONTS[settings.font][0]}', 'Segoe Print', 'Comic Sans MS', system-ui, sans-serif`
+      : "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif");
+    document.querySelectorAll('[data-font]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.font === settings.font)));
     document.querySelectorAll('[data-accent]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.accent === settings.accent)));
     document.querySelectorAll('[data-theme-opt]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeOpt === settings.theme)));
     try { localStorage.setItem('ac-settings', JSON.stringify(settings)); } catch { /* ignore */ }
@@ -739,6 +941,7 @@
     b.addEventListener('click', () => { settings.accent = b.dataset.accent; applySettings(); });
   });
   document.querySelectorAll('[data-theme-opt]').forEach((b) => b.addEventListener('click', () => { settings.theme = b.dataset.themeOpt; applySettings(); }));
+  document.querySelectorAll('[data-font]').forEach((b) => b.addEventListener('click', () => { settings.font = b.dataset.font; applySettings(); }));
   applySettings();
   $('settings-btn').addEventListener('click', () => { $('settings').hidden = false; });
   $('settings-close').addEventListener('click', () => { $('settings').hidden = true; });
@@ -764,7 +967,7 @@
   }
   function openRoom(r) {
     stopMessages?.(); stopMessages = null; stopBlock?.(); stopBlock = null;
-    room = r; oldest = null; els.clear(); pending.clear(); resetMessages();
+    room = r; oldest = null; els.clear(); pending.clear(); msgData.clear(); clearCtx(true); resetMessages();
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages';
     const dm = r.type === 'dm';
     $('purge-btn').hidden = !(isAdmin && !dm);
@@ -807,6 +1010,7 @@
     $('block-btn').hidden = true;
     $('dm-section').hidden = !isAccount;
     $('dm-guest-note').hidden = isAccount;
+    $('avatar-section').hidden = !isAccount;
     highlightRooms();
     if (isAccount) watchInbox();
   }
@@ -816,7 +1020,7 @@
     if (room.type !== 'dm') return;
     const r = ref(db, `blocks/${uid}/${room.otherUid}`);
     try { if ((await get(r)).exists()) await remove(r); else await set(r, true); }
-    catch (e) { console.error(e); alert('Could not update block.'); }
+    catch (e) { console.error(e); toast('Could not update block.'); }
   });
 
   // ---------- Leave ----------
@@ -827,7 +1031,7 @@
     stopInbox?.(); stopInbox = null; stopBlock?.(); stopBlock = null;
     room = { type: 'public' }; isAccount = false; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
     uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true;
-    els.clear(); pending.clear();
+    els.clear(); pending.clear(); msgData.clear(); clearCtx(true);
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
     resetMessages();
     showScreen('welcome');
