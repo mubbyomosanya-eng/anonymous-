@@ -4,100 +4,116 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Anonymous Chat</title>
+<meta name="theme-color" content="#0e1113">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <style>
   :root {
-    --bg: #161819;
-    --surface: #1f2224;
-    --surface-2: #2a2e31;
-    --text: #e8eaea;
-    --muted: #9aa3a6;
-    --accent: #5cb88a;
-    --accent-ink: #0d1a13;
-    --danger: #e5726b;
-    --radius: 16px;
+    --bg: #0e1113; --rail: #0a0c0e; --panel: #14181b; --panel-2: #1b2024; --line: #242b30;
+    --text: #e6ebee; --muted: #8a979f; --accent: #57d6a0; --accent-ink: #06140d; --danger: #f0766e;
+    --font: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
     --app-h: 100dvh; /* overwritten by JS when the keyboard opens */
   }
   * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; background: var(--bg); color: var(--text);
-    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   [hidden] { display: none !important; }
-
   .screen { height: var(--app-h); display: flex; flex-direction: column; }
 
   /* ---------- Welcome ---------- */
-  #welcome { align-items: center; justify-content: center; padding: 24px; }
+  #welcome { align-items: center; justify-content: center; padding: 20px;
+    background: radial-gradient(900px 420px at 50% -10%, rgba(87,214,160,.10), transparent 60%), var(--bg); }
   .card { width: 100%; max-width: 420px; display: grid; gap: 16px; }
-  .card h1 { font-size: 1.9rem; letter-spacing: -0.02em; }
+  #welcome > .card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 28px 24px; }
+  .mark { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+    background: var(--accent); color: var(--accent-ink); font: 800 1.05rem var(--mono); letter-spacing: -.06em; }
+  .card h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -.03em; }
   .card p.lead { color: var(--muted); }
-  label { display: block; margin-bottom: 6px; font-weight: 600; }
+  label { display: block; margin-bottom: 6px; font-weight: 600; font-size: .85rem; color: var(--muted); }
   .field { display: flex; gap: 8px; }
   input[type="text"], input[type="email"], input[type="password"] {
-    flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px;
-    border: 1px solid var(--surface-2); background: var(--surface);
-  }
-  input::placeholder { color: var(--muted); }
-  .hint { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
-  .error { color: var(--danger); font-size: 0.9rem; min-height: 1.3em; }
-  .btn {
-    padding: 12px 16px; border-radius: 12px; border: 1px solid var(--surface-2);
-    background: var(--surface); cursor: pointer; transition: background .15s, opacity .15s;
-  }
-  .btn:hover:not(:disabled) { background: var(--surface-2); }
+    flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--bg); font-size: 16px; }
+  input::placeholder { color: #5b676e; }
+  input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus { border-color: var(--accent); outline: none; }
+  .hint { color: var(--muted); font-size: .8rem; margin-top: 6px; }
+  .error { color: var(--danger); font-size: .88rem; min-height: 1.3em; }
+  .btn { padding: 11px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2);
+    cursor: pointer; font-weight: 600; transition: background .15s, opacity .15s, border-color .15s; }
+  .btn:hover:not(:disabled) { background: #232a2f; border-color: #2f383e; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  .btn.primary:hover:not(:disabled) { background: #6cc99a; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .btn.primary:hover:not(:disabled) { background: #6fe3b2; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+  .tab { padding: 9px 6px; border-radius: 9px; border: 0; background: none; cursor: pointer; font-size: .86rem; font-weight: 600; color: var(--muted); }
+  .tab[aria-pressed="true"] { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+  .link { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0; font-size: .72rem; text-align: left; }
+  .link:hover { color: var(--accent); text-decoration: underline; }
+  #forgot-btn { color: var(--accent); font-size: .85rem; }
 
-  /* ---------- Chat ---------- */
-  header.bar {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--surface-2);
-  }
-  .bar h2 { font-size: 1.05rem; }
-  .bar .sub { color: var(--muted); font-size: 0.8rem; }
-  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
+  /* ---------- Chat layout: side panel + main column ---------- */
+  #chat { flex-direction: row; }
+  .side { display: none; width: 252px; flex-shrink: 0; flex-direction: column; background: var(--rail);
+    border-right: 1px solid var(--line); padding: 14px 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; font-weight: 800; letter-spacing: -.02em; }
+  .brand .mark { width: 30px; height: 30px; border-radius: 10px; font-size: .75rem; }
+  .side-label { font: 600 .66rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 4px 10px 6px; }
+  .room { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); font-weight: 700; }
+  .hash { color: var(--accent); font-family: var(--mono); font-weight: 700; }
+  .grow { flex: 1; }
+  .me { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .me .avatar { width: 34px; height: 34px; border-radius: 10px; font-size: .9rem; }
+  .me-name { font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+  header.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px;
+    background: var(--bg); border-bottom: 1px solid var(--line); }
+  .bar h2 { font-size: 1rem; font-weight: 800; letter-spacing: -.01em; }
+  .bar .sub { color: var(--muted); font-size: .76rem; }
+  .right { display: flex; align-items: center; gap: 12px; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font: 500 .72rem var(--mono); color: var(--muted); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .status[data-state="connected"] .dot { background: var(--accent); }
-  .status[data-state="connecting"] .dot,
-  .status[data-state="reconnecting"] .dot { background: #d9b45a; }
+  .status[data-state="connected"] .dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(87,214,160,.18); }
+  .status[data-state="connecting"] .dot, .status[data-state="reconnecting"] .dot { background: #d9b45a; }
   .status[data-state="disconnected"] .dot { background: var(--danger); }
+  #older-btn { margin: 10px auto 0; font-size: .8rem; padding: 6px 14px; border-radius: 999px; }
 
-  #messages {
-    flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 10px;
-    overscroll-behavior: contain;
-  }
+  /* ---------- Messages ---------- */
+  #messages { flex: 1; overflow-y: auto; padding: 6px 0 10px; display: flex; flex-direction: column; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   .empty { margin: auto; color: var(--muted); text-align: center; max-width: 30ch; }
-  .msg { max-width: min(78%, 520px); display: flex; flex-direction: column; gap: 2px; }
-  .msg .meta { font-size: 0.75rem; color: var(--muted); padding: 0 6px; }
-  .msg .bubble {
-    padding: 9px 13px; border-radius: var(--radius); background: var(--surface-2);
-    overflow-wrap: anywhere; white-space: pre-wrap;
-  }
-  .msg.theirs { align-self: flex-start; }
-  .msg.theirs .bubble { border-bottom-left-radius: 4px; }
-  .msg.mine { align-self: flex-end; align-items: flex-end; }
-  .msg.mine .bubble { background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
-  .msg.pending .bubble { opacity: .6; }
-  .msg.failed .bubble { outline: 1px solid var(--danger); }
-
-  form.composer {
-    display: flex; gap: 8px; padding: 10px 12px; background: var(--surface);
-    border-top: 1px solid var(--surface-2);
-  }
-  .counter { color: var(--muted); font-size: 0.75rem; padding: 0 14px 6px; background: var(--surface); text-align: right; }
-  .counter.over { color: var(--danger); }
-
-  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .tab { padding: 10px 6px; border-radius: 10px; border: 1px solid var(--surface-2); background: var(--surface); cursor: pointer; font-size: .9rem; }
-  .tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  .link { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; text-align: left; font-size: .9rem; }
+  .msg { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; padding: 3px 16px; margin-top: 14px; }
+  .msg.cont { margin-top: 0; }
+  .msg:hover { background: rgba(255,255,255,.025); }
+  .msg.mine { background: rgba(87,214,160,.05); box-shadow: inset 2px 0 0 var(--accent); }
+  .avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 800;
+    background: hsl(var(--h, 150) 38% 22%); color: hsl(var(--h, 150) 80% 82%); user-select: none; }
+  .msg.cont .avatar { visibility: hidden; height: 0; }
+  .meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+  .name { font-weight: 700; color: hsl(var(--h, 150) 65% 72%); }
+  .you { font: 700 .58rem var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 6px; background: var(--accent); color: var(--accent-ink); }
+  .time { font: 400 .68rem var(--mono); color: var(--muted); }
+  .msg.cont .name, .msg.cont .you { display: none; }
+  .msg.cont .meta { opacity: .5; font-size: .8rem; }
+  .msg.cont:hover .meta, .msg.cont:focus-within .meta { opacity: 1; }
+  .bubble { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+  .msg.pending .bubble { opacity: .55; }
+  .msg.failed .bubble { color: var(--danger); }
   .pending .link, .failed .link { display: none; }
-  .flag { color: var(--danger); }
-  #older-btn { margin: 8px auto 0; font-size: .85rem; padding: 8px 14px; }
+  .flag { color: var(--danger); font-size: .72rem; }
 
-  @media (min-width: 720px) {
-    #chat { max-width: 760px; margin: 0 auto; border-inline: 1px solid var(--surface-2); }
+  .counter { padding: 0 20px 4px; text-align: right; font: 400 .68rem var(--mono); color: var(--muted); }
+  form.composer { display: flex; align-items: center; gap: 8px; margin: 0 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 6px 6px 16px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; transition: border-color .15s; }
+  form.composer:focus-within { border-color: var(--accent); }
+  form.composer input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 0; outline: none; font-size: 16px; }
+  form.composer .btn { padding: 9px 16px; }
+
+  @media (min-width: 880px) {
+    .side { display: flex; }
+    .bar .sub { display: none; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -107,6 +123,7 @@
 <!-- Screen 1: Welcome -->
 <main id="welcome" class="screen">
   <div class="card">
+    <div class="mark" aria-hidden="true">//</div>
     <h1>Anonymous Chat</h1>
     <p class="lead">One public room. Join as a guest or with an account. Recent messages are kept for everyone.</p>
 
@@ -139,31 +156,44 @@
 
 <!-- Screen 2: Chat -->
 <section id="chat" class="screen" hidden>
-  <header class="bar">
-    <div>
-      <h2>Anonymous Chat</h2>
-      <div class="sub">Public conversation · <span id="me-name"></span></div>
+  <aside class="side" aria-label="Rooms">
+    <div class="brand"><span class="mark" aria-hidden="true">//</span>Anonymous Chat</div>
+    <div class="side-label">Rooms</div>
+    <div class="room" aria-current="true"><span class="hash">/</span>public</div>
+    <div class="grow"></div>
+    <div class="me">
+      <div class="avatar" id="me-avatar" aria-hidden="true"></div>
+      <div id="me-name-2" class="me-name"></div>
     </div>
-    <div style="display:flex; align-items:center; gap:12px;">
-      <span id="status" class="status" data-state="connecting" aria-live="polite">
-        <span class="dot"></span><span id="status-text">Connecting…</span>
-      </span>
-      <button type="button" id="leave-btn" class="btn">Leave</button>
-    </div>
-  </header>
+  </aside>
 
-  <button type="button" id="older-btn" class="btn" hidden>Load older messages</button>
-  <button type="button" id="purge-btn" class="btn" hidden style="margin:6px auto 0; font-size:.8rem; padding:6px 12px">Admin: purge messages older than 30 days</button>
-  <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
-    <p class="empty" id="empty-note">Nothing here yet. Messages sent after you joined will appear.</p>
+  <div class="main">
+    <header class="bar">
+      <div>
+        <h2><span class="hash">/</span>public</h2>
+        <div class="sub">Open room · <span id="me-name"></span></div>
+      </div>
+      <div class="right">
+        <span id="status" class="status" data-state="connecting" aria-live="polite">
+          <span class="dot"></span><span id="status-text">Connecting…</span>
+        </span>
+        <button type="button" id="leave-btn" class="btn">Leave</button>
+      </div>
+    </header>
+
+    <button type="button" id="older-btn" class="btn" hidden>Load older messages</button>
+    <button type="button" id="purge-btn" class="btn" hidden style="margin:6px auto 0; font-size:.8rem; padding:6px 12px">Admin: purge messages older than 30 days</button>
+    <div id="messages" role="log" aria-live="polite" aria-label="Conversation">
+      <p class="empty" id="empty-note">No messages yet. Say hello.</p>
+    </div>
+
+    <div id="counter" class="counter">0 / 500</div>
+    <form id="composer" class="composer" novalidate>
+      <label for="msg-input" style="position:absolute;left:-9999px">Message</label>
+      <input id="msg-input" type="text" autocomplete="off" placeholder="Message /public">
+      <button type="submit" id="send-btn" class="btn primary">Send</button>
+    </form>
   </div>
-
-  <div id="counter" class="counter">0 / 500</div>
-  <form id="composer" class="composer" novalidate>
-    <label for="msg-input" style="position:absolute;left:-9999px">Message</label>
-    <input id="msg-input" type="text" autocomplete="off" placeholder="Write a message">
-    <button type="submit" id="send-btn" class="btn primary">Send</button>
-  </form>
 </section>
 
 <script type="module">
@@ -201,6 +231,7 @@
   // ---------- State ----------
   let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false, stopReports = null, reported = new Set();
   let stopConnWatch = null, stopMessages = null;
+  let lastMsg = null; // previous rendered message, for grouping consecutive posts
   const els = new Map();     // message key -> DOM element
   const pending = new Set(); // keys of messages we sent that the server hasn't confirmed
 
@@ -233,23 +264,39 @@
   // ---------- Rendering ----------
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  function hueOf(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+  const initialOf = (s) => (Array.from(s)[0] || '?').toUpperCase();
+
   // Always textContent, never innerHTML, for user-supplied strings.
-  function buildMessage({ key, nick, text, ts, mine, state }) {
+  function buildMessage({ key, nick, text, ts, mine, state, cont }) {
     const wrap = document.createElement('div');
-    wrap.className = 'msg ' + (mine ? 'mine' : 'theirs') + (state ? ' ' + state : '');
+    wrap.className = 'msg' + (mine ? ' mine' : '') + (cont ? ' cont' : '') + (state ? ' ' + state : '');
+    wrap.style.setProperty('--h', hueOf(nick));
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar'; avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = initialOf(nick);
+    const body = document.createElement('div');
+    body.className = 'body';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = `${mine ? 'You' : nick} · ${formatTime(ts)}`;
+    const name = document.createElement('span');
+    name.className = 'name'; name.textContent = nick;
+    meta.append(name);
+    if (mine) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; meta.append(y); }
+    const time = document.createElement('span');
+    time.className = 'time'; time.textContent = formatTime(ts);
+    meta.append(time);
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     bubble.textContent = text;
-    wrap.append(meta, bubble);
+    body.append(meta, bubble);
+    wrap.append(avatar, body);
     if (key) {
       const addLink = (label, fn) => {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'link'; b.textContent = label;
         b.addEventListener('click', fn);
-        meta.append(' · ', b);
+        meta.append(b);
       };
       if (mine || isAdmin) addLink('Delete', () => deleteMessage(key));
       if (!mine && !isAdmin) addLink('Report', () => reportMessage(key, nick, text));
@@ -260,7 +307,7 @@
 
   function makeFlag() {
     const f = document.createElement('span');
-    f.className = 'flag'; f.textContent = ' · ⚑ reported';
+    f.className = 'flag'; f.textContent = '⚑ reported';
     return f;
   }
   function applyBadges() {
@@ -303,7 +350,11 @@
 
   function renderMessage(m) {
     $('empty-note')?.remove();
-    const wrap = buildMessage(m);
+    const prev = messagesEl.lastElementChild;
+    const cont = !!(lastMsg && prev?.classList.contains('msg') && lastMsg.nick === m.nick && lastMsg.mine === m.mine
+      && m.ts >= lastMsg.ts && m.ts - lastMsg.ts < 5 * 60 * 1000);
+    const wrap = buildMessage({ ...m, cont });
+    lastMsg = { nick: m.nick, mine: m.mine, ts: m.ts };
     const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
     messagesEl.appendChild(wrap);
     if (m.mine || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -311,6 +362,7 @@
   }
 
   function resetMessages() {
+    lastMsg = null;
     messagesEl.replaceChildren();
     const note = document.createElement('p');
     note.className = 'empty'; note.id = 'empty-note';
@@ -460,6 +512,9 @@
     uid = user.uid;
     nickname = nick;
     $('me-name').textContent = nick;
+    $('me-name-2').textContent = nick;
+    $('me-avatar').textContent = initialOf(nick);
+    $('me-avatar').style.setProperty('--h', hueOf(nick));
     isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
     $('purge-btn').hidden = !isAdmin;
     if (isAdmin) watchReports();
@@ -531,7 +586,9 @@
     els.set(key, el);
     el.classList.remove('pending');
     el.classList.add('failed');
-    el.querySelector('.meta').textContent += ' · Failed to send';
+    const f = document.createElement('span');
+    f.className = 'flag'; f.textContent = 'Failed to send';
+    el.querySelector('.meta').append(f);
   }
 
   $('composer').addEventListener('submit', async (e) => {
