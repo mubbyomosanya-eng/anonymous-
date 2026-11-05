@@ -74,7 +74,7 @@
     font: 800 1.1rem var(--mono); letter-spacing: -.06em; box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 30%, transparent); }
   .card h1 { font: 700 2.7rem/1 var(--display); letter-spacing: -.02em; }
   .card p.lead { color: var(--muted); }
-  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; }
+  .tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; }
   .tab { padding: 9px 4px; border-radius: 10px; border: 0; background: none; cursor: pointer; font-size: .9rem; white-space: nowrap; font-weight: 600; color: var(--muted); transition: background .15s, color .15s; }
   .tab[aria-pressed="true"] { background: var(--panel-3); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
   #forgot-btn { color: var(--accent); }
@@ -213,38 +213,34 @@
 <!-- Screen 1: Welcome -->
 <main id="welcome" class="screen">
   <section class="pitch" aria-hidden="true">
-    <h2>Say it out loud. Stay anonymous.</h2>
+    <h2>Say it out loud. Under a name you choose.</h2>
     <p>One open room for everyone, private chats with people you pick, and nothing tied to your real name.</p>
-    <ul><li>Join as a guest or with an account</li><li>Reply to and edit your messages</li><li>Your colours, your font</li></ul>
+    <ul><li>Sign in to join — no real names required</li><li>Reply to and edit your messages</li><li>Your colours, your font</li></ul>
   </section>
   <div class="card">
     <div class="mark" aria-hidden="true">//</div>
     <h1>Anonymous Chat</h1>
-    <p class="lead">One public room. Join as a guest or with an account. Recent messages are kept for everyone. Anyone in the room can read what you post — don't share personal info.</p>
+    <p class="lead">One public room. Sign in or create an account to join. Everyone in the room can read what you post — don't share personal info.</p>
 
     <form id="join-form" class="card" style="gap:12px" novalidate>
       <div class="tabs" role="group" aria-label="How to join">
-        <button type="button" class="tab" data-mode="guest" aria-pressed="true">Guest</button>
-        <button type="button" class="tab" data-mode="signin" aria-pressed="false">Sign in</button>
+        <button type="button" class="tab" data-mode="signin" aria-pressed="true">Sign in</button>
         <button type="button" class="tab" data-mode="signup" aria-pressed="false">Create account</button>
       </div>
       <div id="nick-field">
-        <label for="nickname">Nickname or username</label>
-        <div class="field">
-          <input id="nickname" type="text" maxlength="24" autocomplete="off"
-                 placeholder="2–24 characters" aria-describedby="nick-hint nick-error">
-          <button type="button" id="random-btn" class="btn">Random</button>
-        </div>
-        <p id="nick-hint" class="hint">Guests: any nickname. Accounts: a unique username (3–20 letters, numbers or _), needed once.</p>
+        <label for="nickname">Username</label>
+        <input id="nickname" type="text" maxlength="20" autocomplete="username"
+               placeholder="3–20 letters, numbers or _" aria-describedby="nick-hint nick-error">
+        <p id="nick-hint" class="hint">Required for new accounts. If you already have one, you can leave it blank.</p>
       </div>
-      <div id="account-fields" hidden style="display:grid; gap:12px">
+      <div id="account-fields" style="display:grid; gap:12px">
         <div><label for="email">Email</label><input id="email" type="email" autocomplete="email" style="width:100%"></div>
         <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" style="width:100%"></div>
         <button type="button" id="forgot-btn" class="link" hidden>Forgot password?</button>
       </div>
       <p id="nick-error" class="error" role="alert"></p>
-      <button type="submit" id="join-btn" class="btn primary">Join as guest</button>
-      <button type="button" id="google-btn" class="btn google" hidden><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Continue with Google</button>
+      <button type="submit" id="join-btn" class="btn primary">Sign in</button>
+      <button type="button" id="google-btn" class="btn google"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Continue with Google</button>
     </form>
   </div>
 </main>
@@ -255,7 +251,7 @@
     <div class="brand"><span class="mark" aria-hidden="true">//</span>Anonymous Chat</div>
     <div class="side-label">Rooms</div>
     <button type="button" class="room active" id="room-public"><span class="hash">/</span>public</button>
-    <div id="dm-section" hidden>
+    <div id="dm-section">
       <div class="side-label">Private</div>
       <div id="dm-list"></div>
       <form id="dm-form" class="dm-form" novalidate>
@@ -265,7 +261,6 @@
       </form>
       <p id="dm-error" class="error"></p>
     </div>
-    <p id="dm-guest-note" class="hint" hidden style="padding:8px 10px">Create an account to send private messages.</p>
     <div class="grow"></div>
     <div class="me">
       <div class="avatar" id="me-avatar" aria-hidden="true"></div>
@@ -312,7 +307,7 @@
 <div id="settings" class="modal" hidden>
   <div class="sheet" role="dialog" aria-label="Settings">
     <h3 class="sheet-title">Settings</h3>
-    <div id="avatar-section" hidden><label>Profile picture</label>
+    <div id="avatar-section"><label>Profile picture</label>
       <div class="opts">
         <input type="file" id="avatar-file" accept="image/*" hidden>
         <button type="button" class="btn" id="avatar-pick">Choose photo</button>
@@ -352,11 +347,11 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, signInAnonymously, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, limitToFirst, endBefore, get, update, remove, onChildAdded, onChildRemoved, onChildChanged, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-  // ---------- Firebase config (public by design; security lives in the database rules) ----------
+  // ---------- Firebase config ----------
   const firebaseConfig = {
     apiKey: "AIzaSyDp_HlVfOgjzQdCWK4iAB_MHm4twZnCvag",
     authDomain: "anonymous-68a75.firebaseapp.com",
@@ -373,7 +368,7 @@
   }
 
   // ---------- Constants ----------
-  const NICK_MIN = 2, NICK_MAX = 24, MSG_MAX = 500, SEND_COOLDOWN_MS = 1500;
+  const MSG_MAX = 500, SEND_COOLDOWN_MS = 1500;
 
   // ---------- Elements ----------
   const $ = (id) => document.getElementById(id);
@@ -385,11 +380,11 @@
   // ---------- State ----------
   let nickname = '', uid = null, joining = false, lastSend = 0, isAdmin = false, stopReports = null, reported = new Set();
   let stopConnWatch = null, stopMessages = null;
-  let room = { type: 'public' }, stopInbox = null, stopBlock = null, isAccount = false;
+  let room = { type: 'public' }, stopInbox = null, stopBlock = null;
   let replyTo = null, editing = null, lastDay = '';
-  let entered = false; // guard against double enterChat (form + onAuthStateChanged)
+  let entered = false;
   const msgData = new Map();
-  const failedMsgs = new Map(); // key -> { text, rt } for retry
+  const failedMsgs = new Map();
   const avatarCache = new Map();
   const base = () => (room.type === 'dm' ? `dms/${room.chatId}/messages` : 'messages');
   let lastMsg = null;
@@ -403,29 +398,8 @@
     if (name === 'chat') msgInput.focus();
   }
 
-  // ---------- Nickname ----------
-  const ADJ = ['Silent','Cosmic','Hidden','Curious','Shadow','Quiet','Lucky','Neon','Misty','Brave','Amber','Rusty'];
-  const NOUN = ['Wolf','Fox','Raven','Ghost','Traveler','Owl','Comet','Lynx','Otter','Falcon','Moth','Badger'];
-  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-  const randomNickname = () => pick(ADJ) + pick(NOUN) + Math.floor(Math.random() * 100);
-
-  function validateNickname(raw) {
-    const n = raw.trim().replace(/\s+/g, ' ');
-    if (n.length < NICK_MIN) return { error: `Nickname must be at least ${NICK_MIN} characters.` };
-    if (n.length > NICK_MAX) return { error: `Nickname must be at most ${NICK_MAX} characters.` };
-    if (!/^[A-Za-z0-9_ ]+$/.test(n)) return { error: 'Use letters, numbers, spaces or _ only.' };
-    return { value: n };
-  }
-
-  $('random-btn').addEventListener('click', () => {
-    nickInput.value = randomNickname();
-    nickError.textContent = '';
-  });
-  nickInput.addEventListener('input', () => { nickError.textContent = ''; });
-
-  // ---------- Rendering ----------
+  // ---------- Rendering helpers ----------
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
   function hueOf(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
   const initialOf = (s) => (Array.from(s)[0] || '?').toUpperCase();
 
@@ -435,6 +409,7 @@
     del: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
     flag: '<path d="M5 21V4m0 0h11l-2 4 2 4H5"/>'
   };
+
   function buildMessage({ key, uid: authorUid, nick, text, ts, mine, state, cont, edited, replyTo: rt }) {
     const wrap = document.createElement('div');
     wrap.className = 'msg' + (mine ? ' mine' : '') + (cont ? ' cont' : '') + (state ? ' ' + state : '');
@@ -463,7 +438,7 @@
       const live = msgData.get(rt.key) || rt;
       const qn = document.createElement('b');
       qn.textContent = live.nick;
-      q.append(qn, ' ' + live.text.slice(0, 100));
+      q.append(qn, ' ' + (live.text || '').slice(0, 100));
       q.addEventListener('click', () => jumpTo(rt.key));
       body.append(q);
     }
@@ -544,7 +519,7 @@
     try {
       await remove(ref(db, `${base()}/${key}`));
       dropElement(key);
-      remove(ref(db, `reports/${key}`)).catch(() => {}); // best effort — rules allow only admins, others fail silently
+      remove(ref(db, `reports/${key}`)).catch(() => {});
     }
     catch (err) { console.error(err); toast('Delete failed.'); }
   }
@@ -611,10 +586,11 @@
   function toView(snap) {
     const v = snap.val() || {};
     if (typeof v.text !== 'string' || typeof v.nick !== 'string') return null;
+    if (v.text.length === 0) return null;
     const r = v.replyTo;
     const replyTo = r && typeof r.key === 'string' && typeof r.nick === 'string' && typeof r.text === 'string'
-      ? { key: r.key.slice(0, 40), nick: r.nick.slice(0, NICK_MAX), text: r.text.slice(0, 100) } : null;
-    return { uid: typeof v.uid === 'string' ? v.uid : null, nick: v.nick.slice(0, NICK_MAX), text: v.text.slice(0, MSG_MAX),
+      ? { key: r.key.slice(0, 40), nick: r.nick.slice(0, 24), text: r.text.slice(0, 100) } : null;
+    return { uid: typeof v.uid === 'string' ? v.uid : null, nick: v.nick.slice(0, 24), text: v.text.slice(0, MSG_MAX),
       ts: Number(v.ts) || Date.now(), mine: v.uid === uid, edited: Number(v.edited) || 0, replyTo };
   }
   const track = (key, ts) => { if (!oldest || ts < oldest.ts) oldest = { ts, key }; };
@@ -625,7 +601,6 @@
       const key = snap.key;
       const existing = els.get(key);
       if (existing) {
-        // Confirmation of an optimistic render — clear pending and refresh cached text
         existing.classList.remove('pending');
         const m = toView(snap);
         if (m) msgData.set(key, { nick: m.nick, text: m.text });
@@ -646,7 +621,8 @@
       const m = toView(snap), el = els.get(snap.key);
       if (!m || !el) return;
       msgData.set(snap.key, { nick: m.nick, text: m.text });
-      el.querySelector('.bubble').textContent = m.text;
+      const bubble = el.querySelector('.bubble');
+      if (bubble) bubble.textContent = m.text;
       if (m.edited && !el.querySelector('.edited')) {
         const t = document.createElement('span');
         t.className = 'edited'; t.textContent = '(edited)';
@@ -685,21 +661,20 @@
     }
   });
 
-  // ---------- Join ----------
-  const LABELS = { guest: 'Join as guest', signin: 'Sign in', signup: 'Create account' };
-  let mode = 'guest';
+  // ---------- Join (accounts only) ----------
+  const LABELS = { signin: 'Sign in', signup: 'Create account' };
+  let mode = 'signin';
 
   function setMode(m) {
     mode = m;
     document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-    $('account-fields').hidden = m === 'guest';
-    $('google-btn').hidden = m === 'guest';
     $('forgot-btn').hidden = m !== 'signin';
     $('password').autocomplete = m === 'signup' ? 'new-password' : 'current-password';
     $('join-btn').textContent = LABELS[m];
     nickError.textContent = '';
   }
   document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  setMode('signin');
 
   function setJoining(on) {
     joining = on;
@@ -735,7 +710,7 @@
     const existing = (await get(ref(db, `users/${user.uid}/username`))).val();
     if (existing) return existing;
     const name = preferred.trim();
-    if (!USERNAME_RE.test(name)) fail('Enter a username in the box: 3–20 letters, numbers or _.');
+    if (!USERNAME_RE.test(name)) fail('Enter a username: 3–20 letters, numbers or _.');
     try {
       await update(ref(db), { [`usernames/${name.toLowerCase()}`]: user.uid, [`users/${user.uid}/username`]: name });
     } catch (e) { console.error(e); throw Object.assign(new Error('taken'), { code: 'app/taken' }); }
@@ -752,7 +727,6 @@
     $('me-avatar').textContent = initialOf(nick);
     $('me-avatar').style.setProperty('--h', hueOf(nick));
     $('me-avatar').dataset.uid = uid; $('me-avatar').dataset.initial = initialOf(nick); useAvatar(uid, $('me-avatar'));
-    isAccount = !user.isAnonymous;
     isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
     $('purge-btn').hidden = !isAdmin;
     if (isAdmin) watchReports();
@@ -778,14 +752,6 @@
   $('join-form').addEventListener('submit', (e) => {
     e.preventDefault();
     startJoin(async () => {
-      if (mode === 'guest') {
-        const r = validateNickname(nickInput.value);
-        if (r.error) fail(r.error);
-        const user = (await signInAnonymously(auth)).user;
-        if ((await get(ref(db, 'usernames/' + r.value.toLowerCase()))).exists()) fail('That name belongs to an account. Pick another.');
-        try { localStorage.setItem('ac-nick-' + user.uid, r.value); } catch {}
-        return enterChat(user, r.value);
-      }
       const email = $('email').value.trim(), password = $('password').value;
       if (!email || !password) fail('Enter your email and password.');
       if (mode === 'signup') {
@@ -819,16 +785,10 @@
   if (auth) {
     auth.onAuthStateChanged(async (user) => {
       if (!user) { entered = false; return; }
-      if (entered) return;
+      if (entered || user.isAnonymous) return;
       try {
-        if (!user.isAnonymous) {
-          const name = (await get(ref(db, 'users/' + user.uid + '/username'))).val();
-          if (name) return enterChat(user, name);
-        }
-        if (user.isAnonymous) {
-          const cached = localStorage.getItem('ac-nick-' + user.uid);
-          if (cached) return enterChat(user, cached);
-        }
+        const name = (await get(ref(db, 'users/' + user.uid + '/username'))).val();
+        if (name) enterChat(user, name);
       } catch (e) { console.error('resume failed', e); }
     });
   }
@@ -903,37 +863,14 @@
     }
   }
 
-  $('composer').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const text = msgInput.value.trim().replace(/\n{3,}/g, '\n\n');
-    if (!text || text.length > MSG_MAX || !uid) return;
-
-    const now = Date.now();
-    if (now - lastSend < SEND_COOLDOWN_MS) { toast('Please wait a moment'); return; }
-    lastSend = now;
-    $('send-btn').disabled = true;
-    setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
-
-    if (editing) {
-      const { key, path } = editing;
-      const unchanged = msgData.get(key)?.text === text;
-      clearCtx(true);
-      if (unchanged) return;
-      try {
-        await update(ref(db), { [`${path}/${key}/text`]: text, [`${path}/${key}/edited`]: serverTimestamp(), [`lastPost/${uid}`]: serverTimestamp() });
-      } catch (err) { console.error(err); toast('Edit failed — wait a moment and try again.'); }
-      return;
-    }
-
+  async function sendMessage(text) {
     const sendRoom = room, path = base();
     const rt = replyTo;
     const newRef = push(ref(db, path));
     const key = newRef.key;
 
-    // Optimistic render — visible immediately, cleared on server ack
     pending.add(key);
-    const optimisticEl = renderMessage({ nick: nickname, text, ts: now, mine: true, key, state: 'pending', replyTo: rt });
-    els.set(key, optimisticEl);
+    els.set(key, renderMessage({ nick: nickname, text, ts: Date.now(), mine: true, key, state: 'pending', replyTo: rt }));
     msgData.set(key, { nick: nickname, text });
     clearCtx(true);
     msgInput.focus();
@@ -957,6 +894,34 @@
       pending.delete(key);
       markFailed(key, text, rt);
     }
+  }
+
+  $('composer').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!uid) return;
+
+    const text = msgInput.value.trim().replace(/\n{3,}/g, '\n\n');
+    if (!text || text.length > MSG_MAX) return;
+
+    const now = Date.now();
+    if (now - lastSend < SEND_COOLDOWN_MS) { toast('Please wait a moment'); return; }
+    lastSend = now;
+
+    if (editing) {
+      const { key, path } = editing;
+      const unchanged = msgData.get(key)?.text === text;
+      clearCtx(true);
+      if (unchanged) return;
+      try {
+        await update(ref(db), { [`${path}/${key}/text`]: text, [`${path}/${key}/edited`]: serverTimestamp(), [`lastPost/${uid}`]: serverTimestamp() });
+      } catch (err) { console.error(err); toast('Edit failed — wait a moment and try again.'); }
+      return;
+    }
+
+    $('send-btn').disabled = true;
+    setTimeout(() => { $('send-btn').disabled = false; }, SEND_COOLDOWN_MS);
+
+    await sendMessage(text);
   });
 
   // ---------- Admin purge ----------
@@ -1048,7 +1013,7 @@
   }
   async function setAvatar(file) {
     try {
-      const bmp = await createImageBitmap(file);
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
       const c = document.createElement('canvas');
       c.width = c.height = 96;
       const s = Math.min(bmp.width, bmp.height);
@@ -1173,11 +1138,10 @@
     room = { type: 'public' };
     setHeader('/', 'public');
     $('block-btn').hidden = true;
-    $('dm-section').hidden = !isAccount;
-    $('dm-guest-note').hidden = isAccount;
-    $('avatar-section').hidden = !isAccount;
+    $('dm-section').hidden = false;
+    $('avatar-section').hidden = false;
     highlightRooms();
-    if (isAccount) watchInbox();
+    watchInbox();
   }
   $('room-public').addEventListener('click', () => { if (room.type !== 'public') openRoom({ type: 'public' }); else setNav(false); });
   $('dm-form').addEventListener('submit', (e) => { e.preventDefault(); openDm($('dm-input').value); $('dm-input').value = ''; });
@@ -1194,8 +1158,7 @@
     stopConnWatch?.(); stopConnWatch = null;
     stopReports?.(); stopReports = null; reported = new Set();
     stopInbox?.(); stopInbox = null; stopBlock?.(); stopBlock = null;
-    if (uid) { try { localStorage.removeItem('ac-nick-' + uid); } catch {} }
-    room = { type: 'public' }; isAccount = false; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
+    room = { type: 'public' }; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
     uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true; entered = false;
     els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); clearCtx(true);
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages'; $('password').value = '';
