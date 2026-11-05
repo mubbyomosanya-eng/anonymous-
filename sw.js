@@ -2,6 +2,7 @@ const CACHE_NAME = 'anon-chat-v1';
 const ASSETS = [
   '/',
   '/index.html',
+  '/manifest.json',
   'https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@500;700&display=swap'
 ];
 
