@@ -117,13 +117,13 @@
         <button type="button" class="tab" data-mode="signup" aria-pressed="false">Create account</button>
       </div>
       <div id="nick-field">
-        <label for="nickname">Nickname</label>
+        <label for="nickname">Nickname or username</label>
         <div class="field">
           <input id="nickname" type="text" maxlength="24" autocomplete="off"
                  placeholder="2–24 characters" aria-describedby="nick-hint nick-error">
           <button type="button" id="random-btn" class="btn">Random</button>
         </div>
-        <p id="nick-hint" class="hint">Pick a name or generate one. Nicknames are not unique.</p>
+        <p id="nick-hint" class="hint">Guests: any nickname. Accounts: a unique username (3–20 letters, numbers or _), needed once.</p>
       </div>
       <div id="account-fields" hidden style="display:grid; gap:12px">
         <div><label for="email">Email</label><input id="email" type="email" autocomplete="email" style="width:100%"></div>
@@ -132,6 +132,7 @@
       </div>
       <p id="nick-error" class="error" role="alert"></p>
       <button type="submit" id="join-btn" class="btn primary">Join as guest</button>
+      <button type="button" id="google-btn" class="btn" hidden>Continue with Google</button>
     </form>
   </div>
 </main>
@@ -167,7 +168,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, signInAnonymously, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getAuth, signInAnonymously, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import { getDatabase, ref, onValue, push, set, query, orderByChild, limitToLast, limitToFirst, endBefore, get, update, remove, onChildAdded, onChildRemoved, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
@@ -220,6 +221,7 @@
     const n = raw.trim().replace(/\s+/g, ' ');
     if (n.length < NICK_MIN) return { error: `Nickname must be at least ${NICK_MIN} characters.` };
     if (n.length > NICK_MAX) return { error: `Nickname must be at most ${NICK_MAX} characters.` };
+    if (!/^[A-Za-z0-9_ ]+$/.test(n)) return { error: 'Use letters, numbers, spaces or _ only.' };
     return { value: n };
   }
 
@@ -291,10 +293,10 @@
   async function deleteMessage(key) {
     if (!confirm('Delete this message for everyone?')) return;
     try {
-      // Admins also clear the message's reports in the same write; normal users may only delete their own message.
-      await (isAdmin ? update(ref(db), { [`messages/${key}`]: null, [`reports/${key}`]: null })
-                     : remove(ref(db, `messages/${key}`)));
+      await remove(ref(db, `messages/${key}`));
       dropElement(key);
+      // Admins also clear the message's reports; best effort, so a rules problem here never blocks the delete.
+      if (isAdmin) remove(ref(db, `reports/${key}`)).catch((e) => console.warn('report cleanup failed', e));
     }
     catch (err) { console.error(err); alert('Delete failed.'); }
   }
@@ -402,7 +404,7 @@
     mode = m;
     document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
     $('account-fields').hidden = m === 'guest';
-    $('nick-field').hidden = m === 'signin';
+    $('google-btn').hidden = m === 'guest';
     $('forgot-btn').hidden = m !== 'signin';
     $('password').autocomplete = m === 'signup' ? 'new-password' : 'current-password';
     $('join-btn').textContent = LABELS[m];
@@ -429,50 +431,85 @@
       'auth/weak-password': 'Password must be at least 6 characters.',
       'auth/missing-password': 'Enter your password.'
     };
+    Object.assign(map, {
+      'auth/popup-closed-by-user': 'Sign-in was cancelled.',
+      'auth/popup-blocked': 'Popup blocked. Allow popups and try again.',
+      'auth/cancelled-popup-request': 'Sign-in was cancelled.'
+    });
+    if (err.code === 'app/username') return err.message;
+    if (err.code === 'app/taken') return 'That username is taken. Try another.';
     return map[err.code] || 'Could not join. Try again.';
   }
 
-  $('join-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
+  const fail = (m) => { throw Object.assign(new Error(m), { code: 'app/username' }); };
+
+  // Accounts get a unique username, claimed once; the rules make claims first-come, first-served.
+  async function ensureUsername(user, preferred) {
+    const existing = (await get(ref(db, `users/${user.uid}/username`))).val();
+    if (existing) return existing;
+    const name = preferred.trim();
+    if (!USERNAME_RE.test(name)) fail('Enter a username in the box: 3–20 letters, numbers or _.');
+    try {
+      await update(ref(db), { [`usernames/${name.toLowerCase()}`]: user.uid, [`users/${user.uid}/username`]: name });
+    } catch (e) { console.error(e); throw Object.assign(new Error('taken'), { code: 'app/taken' }); }
+    return name;
+  }
+
+  async function enterChat(user, nick) {
+    uid = user.uid;
+    nickname = nick;
+    $('me-name').textContent = nick;
+    isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
+    $('purge-btn').hidden = !isAdmin;
+    if (isAdmin) watchReports();
+    showScreen('chat');
+    watchConnection();
+    listen();
+  }
+
+  async function startJoin(task) {
     if (joining) return;
     if (!configured) { nickError.textContent = 'Firebase is not configured.'; return; }
-    let nick = null;
-    if (mode !== 'signin') {
-      const r = validateNickname(nickInput.value);
-      if (r.error) { nickError.textContent = r.error; nickInput.focus(); return; }
-      nick = r.value;
-    }
-    const email = $('email').value.trim(), password = $('password').value;
-    if (mode !== 'guest' && (!email || !password)) { nickError.textContent = 'Enter your email and password.'; return; }
     nickError.textContent = '';
     setJoining(true);
-    try {
-      let user;
-      if (mode === 'guest') {
-        user = (await signInAnonymously(auth)).user;
-      } else if (mode === 'signup') {
-        user = (await createUserWithEmailAndPassword(auth, email, password)).user;
-        await updateProfile(user, { displayName: nick });   // the account's nickname lives in the Auth profile
-      } else {
-        user = (await signInWithEmailAndPassword(auth, email, password)).user;
-        nick = (user.displayName || email.split('@')[0] || 'user').slice(0, NICK_MAX).padEnd(NICK_MIN, '_');
-      }
-      uid = user.uid;
-      nickname = nick;
-      $('me-name').textContent = nickname;
-      isAdmin = await get(ref(db, 'admins/' + uid)).then((s) => s.val() === true, () => false);
-      $('purge-btn').hidden = !isAdmin;
-      if (isAdmin) watchReports();
-      showScreen('chat');
-      watchConnection();
-      listen();
-    } catch (err) {
+    try { await task(); }
+    catch (err) {
       nickError.textContent = joinErrorMessage(err);
-      if (auth.currentUser) signOut(auth).catch(() => {});
-    } finally {
-      setJoining(false);
-    }
+      if (auth.currentUser) await signOut(auth).catch(() => {});
+    } finally { setJoining(false); }
+  }
+
+  $('join-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    startJoin(async () => {
+      if (mode === 'guest') {
+        const r = validateNickname(nickInput.value);
+        if (r.error) fail(r.error);
+        const user = (await signInAnonymously(auth)).user;
+        // Guests can't use a name an account has claimed (the rules enforce this too).
+        if ((await get(ref(db, 'usernames/' + r.value.toLowerCase()))).exists()) fail('That name belongs to an account. Pick another.');
+        return enterChat(user, r.value);
+      }
+      const email = $('email').value.trim(), password = $('password').value;
+      if (!email || !password) fail('Enter your email and password.');
+      if (mode === 'signup') {
+        if (!USERNAME_RE.test(nickInput.value.trim())) fail('Username: 3–20 letters, numbers or _ (no spaces).');
+        const user = (await createUserWithEmailAndPassword(auth, email, password)).user;
+        let name;
+        try { name = await ensureUsername(user, nickInput.value); }
+        catch (err) { await deleteUser(user).catch(() => {}); throw err; } // don't leave an account without a username
+        return enterChat(user, name);
+      }
+      const user = (await signInWithEmailAndPassword(auth, email, password)).user;
+      return enterChat(user, await ensureUsername(user, nickInput.value));
+    });
   });
+
+  $('google-btn').addEventListener('click', () => startJoin(async () => {
+    const user = (await signInWithPopup(auth, new GoogleAuthProvider())).user;
+    return enterChat(user, await ensureUsername(user, nickInput.value));
+  }));
 
   $('forgot-btn').addEventListener('click', async () => {
     const email = $('email').value.trim();
