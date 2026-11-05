@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Anonymous Chat</title>
 <meta name="theme-color" content="#0e1113">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='21' fill='%2357d6a0'/%3E%3Cline x1='18' y1='50' x2='28' y2='14' stroke='%2306140d' stroke-width='7' stroke-linecap='round'/%3E%3Cline x1='36' y1='50' x2='46' y2='14' stroke='%2306140d' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@500;700&display=swap">
@@ -214,7 +215,7 @@
   <section class="pitch" aria-hidden="true">
     <h2>Say it out loud. Under a name you choose.</h2>
     <p>One open room for everyone, private chats with people you pick, and nothing tied to your real name.</p>
-    <ul><li>Sign in to join — no real names required</li><li>Reply to and edit your messages</li><li>Your colours, your font</li></ul>
+    <ul><li>Sign in to join — no real names required</li><li>Reply to and edit your messages</li><li>Get notified when messages arrive</li></ul>
   </section>
   <div class="card">
     <div class="mark" aria-hidden="true">//</div>
@@ -339,6 +340,12 @@
         <button type="button" class="btn" data-enter-opt="true">Enter</button>
         <button type="button" class="btn" data-enter-opt="false">Ctrl / ⌘ + Enter</button>
       </div></div>
+    <div><label>Notifications</label>
+      <div class="opts">
+        <button type="button" class="btn" id="notify-toggle" aria-pressed="false">Off</button>
+      </div>
+      <p class="hint" id="notify-hint">Get an alert when a new message arrives while this tab is in the background.</p>
+    </div>
     <p class="hint">Saved on this device only.</p>
     <button type="button" id="settings-close" class="btn primary">Done</button>
   </div>
@@ -446,7 +453,6 @@
     body.append(bubble);
     wrap.append(avatar, body);
 
-    // Avatar AFTER append — see paintOne/useAvatar below
     if (authorUid) {
       avatar.dataset.uid = authorUid;
       useAvatar(authorUid, avatar);
@@ -601,6 +607,7 @@
   const track = (key, ts) => { if (!oldest || ts < oldest.ts) oldest = { ts, key }; };
 
   function listen() {
+    listenStart = Date.now();
     const q = query(ref(db, base()), orderByChild('ts'), limitToLast(PAGE));
     stopMessages = onChildAdded(q, (snap) => {
       const key = snap.key;
@@ -616,6 +623,7 @@
       track(key, m.ts);
       msgData.set(key, { nick: m.nick, text: m.text });
       els.set(key, renderMessage({ ...m, key, state: pending.has(key) ? 'pending' : '' }));
+      maybeNotify(m, key);
     }, () => setStatus('disconnected', 'Cannot read messages'));
     const offRemoved = onChildRemoved(q, async (snap) => {
       const key = snap.key;
@@ -877,7 +885,6 @@
     const key = newRef.key;
 
     pending.add(key);
-    // Pass uid so the avatar's data-uid gets set on the optimistic element too
     els.set(key, renderMessage({ uid, nick: nickname, text, ts: Date.now(), mine: true, key, state: 'pending', replyTo: rt }));
     msgData.set(key, { nick: nickname, text });
     clearCtx(true);
@@ -1021,7 +1028,7 @@
       if (url && AVATAR_RE.test(url)) paintOne(el, url);
       return;
     }
-    avatarCache.set(u, null); // mark as requested
+    avatarCache.set(u, null);
     get(ref(db, 'avatars/' + u)).then((s) => {
       const url = s.val() || null;
       avatarCache.set(u, url);
@@ -1066,7 +1073,7 @@
   // ---------- Settings ----------
   const ACCENTS = { mint: '#57d6a0', sky: '#5cb8ff', amber: '#f2b84b', rose: '#ff7a9c', violet: '#a98bff', coral: '#ff8a5c' };
   const FONTS = { patrick: ['Patrick Hand', 'Patrick+Hand'], kalam: ['Kalam', 'Kalam'], architects: ['Architects Daughter', 'Architects+Daughter'], clean: [null, null] };
-  const settings = { accent: 'mint', theme: 'ink', font: 'patrick', enterToSend: matchMedia('(pointer: fine)').matches };
+  const settings = { accent: 'mint', theme: 'ink', font: 'patrick', enterToSend: matchMedia('(pointer: fine)').matches, notify: false };
   function loadFont(k) {
     const [name, fam] = FONTS[k];
     if (!name || document.getElementById('font-' + k)) return;
@@ -1097,7 +1104,8 @@
   document.querySelectorAll('[data-font]').forEach((b) => b.addEventListener('click', () => { settings.font = b.dataset.font; applySettings(); }));
   document.querySelectorAll('[data-enter-opt]').forEach((b) => b.addEventListener('click', () => { settings.enterToSend = b.dataset.enterOpt === 'true'; applySettings(); }));
   applySettings();
-  $('settings-btn').addEventListener('click', () => { $('settings').hidden = false; });
+  updateNotifyButton();
+  $('settings-btn').addEventListener('click', () => { $('settings').hidden = false; updateNotifyButton(); });
   $('settings-close').addEventListener('click', () => { $('settings').hidden = true; });
   $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
 
@@ -1129,6 +1137,7 @@
   }
   function openRoom(r) {
     stopMessages?.(); stopMessages = null; stopBlock?.(); stopBlock = null;
+    resetUnread(); notified.clear();
     room = r; oldest = null; els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); clearCtx(true); resetMessages();
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages';
     const dm = r.type === 'dm';
@@ -1190,6 +1199,7 @@
     stopInbox?.(); stopInbox = null; stopBlock?.(); stopBlock = null;
     room = { type: 'public' }; setNav(false); $('dm-list').replaceChildren(); $('settings').hidden = true;
     uid = null; oldest = null; isAdmin = false; $('purge-btn').hidden = true; entered = false;
+    resetUnread(); notified.clear();
     els.clear(); pending.clear(); msgData.clear(); failedMsgs.clear(); avatarCache.clear(); clearCtx(true);
     $('older-btn').hidden = true; $('older-btn').textContent = 'Load older messages';
     $('password').value = ''; $('email').value = '';
@@ -1197,6 +1207,114 @@
     showScreen('welcome');
     if (auth) await signOut(auth).catch(() => {});
   });
+
+  // ---------- Notifications ----------
+  const NOTIF_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+    '<rect width="64" height="64" rx="21" fill="#57d6a0"/>' +
+    '<line x1="18" y1="50" x2="28" y2="14" stroke="#06140d" stroke-width="7" stroke-linecap="round"/>' +
+    '<line x1="36" y1="50" x2="46" y2="14" stroke="#06140d" stroke-width="7" stroke-linecap="round"/>' +
+    '</svg>'
+  );
+
+  let unreadCount = 0;
+  let listenStart = 0;
+  const notified = new Set();
+
+  function notificationsSupported() { return 'Notification' in window; }
+
+  function updateTitle() {
+    document.title = unreadCount > 0 ? `(${unreadCount}) Anonymous Chat` : 'Anonymous Chat';
+  }
+  function resetUnread() {
+    if (unreadCount === 0) return;
+    unreadCount = 0;
+    updateTitle();
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') resetUnread();
+  });
+
+  function updateNotifyButton() {
+    const b = $('notify-toggle'), hint = $('notify-hint');
+    if (!b) return;
+    if (!notificationsSupported()) {
+      b.textContent = 'Unsupported'; b.disabled = true; b.setAttribute('aria-pressed', 'false');
+      if (hint) hint.textContent = 'This browser does not support notifications.';
+      return;
+    }
+    const perm = Notification.permission;
+    if (perm === 'denied') {
+      b.textContent = 'Blocked'; b.disabled = true; b.setAttribute('aria-pressed', 'false');
+      if (hint) hint.textContent = 'Notifications are blocked. Allow them in your browser settings for this site, then reload.';
+    } else if (perm === 'granted' && settings.notify) {
+      b.textContent = 'On'; b.disabled = false; b.setAttribute('aria-pressed', 'true');
+      if (hint) hint.textContent = 'You will get an alert when a new message arrives while this tab is in the background.';
+    } else {
+      b.textContent = 'Off'; b.disabled = false; b.setAttribute('aria-pressed', 'false');
+      if (hint) hint.textContent = 'Get an alert when a new message arrives while this tab is in the background.';
+    }
+  }
+
+  $('notify-toggle').addEventListener('click', async () => {
+    if (!notificationsSupported()) return;
+    if (Notification.permission === 'denied') { toast('Notifications are blocked in browser settings.'); return; }
+    if (Notification.permission === 'granted' && settings.notify) {
+      settings.notify = false;
+      applySettings();
+      updateNotifyButton();
+      toast('Notifications off.');
+      return;
+    }
+    const result = await Notification.requestPermission();
+    if (result === 'granted') {
+      settings.notify = true;
+      applySettings();
+      toast('Notifications enabled.');
+      try {
+        const n = new Notification('Anonymous Chat', {
+          body: 'You will be notified when messages arrive while this tab is in the background.',
+          icon: NOTIF_ICON, tag: 'ac-test'
+        });
+        setTimeout(() => { try { n.close(); } catch {} }, 4000);
+      } catch {}
+    } else if (result === 'denied') {
+      toast('Notifications blocked.');
+    }
+    updateNotifyButton();
+  });
+
+  function maybeNotify(m, key) {
+    if (!settings.notify) return;
+    if (!notificationsSupported()) return;
+    if (Notification.permission !== 'granted') return;
+    if (m.mine) return;
+    if (document.visibilityState === 'visible') return;
+    if (m.ts < listenStart - 2000) return;
+    if (notified.has(key)) return;
+    notified.add(key);
+    try {
+      const preview = m.text.length > 140 ? m.text.slice(0, 140) + '…' : m.text;
+      const roomLabel = room.type === 'dm' ? 'Private message' : '/public';
+      const n = new Notification(`${m.nick} · ${roomLabel}`, {
+        body: preview, icon: NOTIF_ICON, tag: `ac-${key}`,
+      });
+      const snapshot = { ...room };
+      n.onclick = () => {
+        window.focus();
+        if (room.type !== snapshot.type || room.chatId !== snapshot.chatId) {
+          openRoom(snapshot);
+          setTimeout(() => jumpTo(key), 80);
+        } else {
+          jumpTo(key);
+        }
+        try { n.close(); } catch {}
+      };
+      setTimeout(() => { try { n.close(); } catch {} }, 10000);
+      unreadCount += 1;
+      updateTitle();
+    } catch (e) { /* some platforms block data-URI icons, still fires */ }
+  }
 
   // ---------- Mobile keyboard ----------
   if (window.visualViewport) {
@@ -1209,3 +1327,4 @@
   }
 </script>
 </body>
+</html>
