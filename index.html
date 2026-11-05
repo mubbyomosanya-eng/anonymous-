@@ -1319,12 +1319,14 @@
       applySettings();
       toast('Notifications enabled.');
       try {
-        const n = new Notification('Anonymous Chat', {
-          body: 'You will be notified when messages arrive while this tab is in the background.',
-          icon: NOTIF_ICON, tag: 'ac-test'
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.showNotification('Anonymous Chat', {
+            body: 'You will be notified when messages arrive while this app is in the background.',
+            icon: NOTIF_ICON,
+            tag: 'ac-test'
+          });
         });
-        setTimeout(() => { try { n.close(); } catch {} }, 4000);
-      } catch {}
+      } catch (e) { console.error("Test notif failed", e); }
     } else if (result === 'denied') {
       toast('Notifications blocked.');
     }
@@ -1333,34 +1335,30 @@
 
   function maybeNotify(m, key) {
     if (!settings.notify) return;
-    if (!notificationsSupported()) return;
+    if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
     if (m.mine) return;
     if (document.visibilityState === 'visible') return;
     if (m.ts < listenStart - 2000) return;
     if (notified.has(key)) return;
     notified.add(key);
+    
     try {
       const preview = m.text.length > 140 ? m.text.slice(0, 140) + '…' : m.text;
       const roomLabel = room.type === 'dm' ? 'Private message' : '/public';
-      const n = new Notification(`${m.nick} · ${roomLabel}`, {
-        body: preview, icon: NOTIF_ICON, tag: `ac-${key}`,
+      
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(`${m.nick} · ${roomLabel}`, {
+          body: preview, 
+          icon: NOTIF_ICON, 
+          tag: `ac-${key}`,
+          data: { room: room }
+        });
       });
-      const snapshot = { ...room };
-      n.onclick = () => {
-        window.focus();
-        if (room.type !== snapshot.type || room.chatId !== snapshot.chatId) {
-          openRoom(snapshot);
-          setTimeout(() => jumpTo(key), 80);
-        } else {
-          jumpTo(key);
-        }
-        try { n.close(); } catch {}
-      };
-      setTimeout(() => { try { n.close(); } catch {} }, 10000);
+      
       unreadCount += 1;
       updateTitle();
-    } catch (e) { /* some platforms block data-URI icons, still fires */ }
+    } catch (e) { console.error("Notification error", e); }
   }
 
   // ---------- Mobile keyboard ----------
