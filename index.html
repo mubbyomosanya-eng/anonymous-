@@ -10,6 +10,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Caveat:wght@500;700&display=swap">
+
+<!-- ONESIGNAL SDK -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "be002a23-cc09-45ae-924a-1d57308f82a9", // Your App ID is safe to be public
+      notifyButton: { enable: true },
+      allowLocalhostAsSecureOrigin: true
+    });
+  });
+</script>
+
 <style>
   /* ===== Design tokens ===== */
   :root {
@@ -956,6 +970,18 @@
       pending.delete(key);
       markFailed(key, text, rt);
     }
+
+    // --- SAFE ONESIGNAL TRIGGER VIA VERCEL ---
+    // The secret key lives safely on Vercel, not in this HTML.
+    fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+          senderName: nickname, 
+          text: text, 
+          room: sendRoom.type === 'dm' ? 'Private' : '/public'
+      })
+    }).catch(err => console.log("Push failed to send", err));
   }
 
   $('composer').addEventListener('submit', async (e) => {
@@ -1255,20 +1281,10 @@
     if (auth) await signOut(auth).catch(() => {});
   });
 
-  // ---------- Notifications ----------
-  const NOTIF_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
-    '<rect width="64" height="64" rx="21" fill="#57d6a0"/>' +
-    '<line x1="18" y1="50" x2="28" y2="14" stroke="#06140d" stroke-width="7" stroke-linecap="round"/>' +
-    '<line x1="36" y1="50" x2="46" y2="14" stroke="#06140d" stroke-width="7" stroke-linecap="round"/>' +
-    '</svg>'
-  );
-
+  // ---------- Notifications Fallback (In-app) ----------
   let unreadCount = 0;
   let listenStart = 0;
   const notified = new Set();
-
-  function notificationsSupported() { return 'Notification' in window; }
 
   function updateTitle() {
     document.title = unreadCount > 0 ? `(${unreadCount}) Anonymous Chat` : 'Anonymous Chat';
@@ -1283,82 +1299,21 @@
   });
 
   function updateNotifyButton() {
-    const b = $('notify-toggle'), hint = $('notify-hint');
+    // Just a UI placeholder now since OneSignal handles the real push
+    const b = $('notify-toggle');
     if (!b) return;
-    if (!notificationsSupported()) {
-      b.textContent = 'Unsupported'; b.disabled = true; b.setAttribute('aria-pressed', 'false');
-      if (hint) hint.textContent = 'This browser does not support notifications.';
-      return;
-    }
-    const perm = Notification.permission;
-    if (perm === 'denied') {
-      b.textContent = 'Blocked'; b.disabled = true; b.setAttribute('aria-pressed', 'false');
-      if (hint) hint.textContent = 'Notifications are blocked. Allow them in your browser settings for this site, then reload.';
-    } else if (perm === 'granted' && settings.notify) {
-      b.textContent = 'On'; b.disabled = false; b.setAttribute('aria-pressed', 'true');
-      if (hint) hint.textContent = 'You will get an alert when a new message arrives while this tab is in the background.';
-    } else {
-      b.textContent = 'Off'; b.disabled = false; b.setAttribute('aria-pressed', 'false');
-      if (hint) hint.textContent = 'Get an alert when a new message arrives while this tab is in the background.';
-    }
+    b.textContent = 'On (via OS)';
+    b.setAttribute('aria-pressed', 'true');
   }
 
-  $('notify-toggle').addEventListener('click', async () => {
-    if (!notificationsSupported()) return;
-    if (Notification.permission === 'denied') { toast('Notifications are blocked in browser settings.'); return; }
-    if (Notification.permission === 'granted' && settings.notify) {
-      settings.notify = false;
-      applySettings();
-      updateNotifyButton();
-      toast('Notifications off.');
-      return;
-    }
-    const result = await Notification.requestPermission();
-    if (result === 'granted') {
-      settings.notify = true;
-      applySettings();
-      toast('Notifications enabled.');
-      try {
-        navigator.serviceWorker.ready.then((reg) => {
-          reg.showNotification('Anonymous Chat', {
-            body: 'You will be notified when messages arrive while this app is in the background.',
-            icon: NOTIF_ICON,
-            tag: 'ac-test'
-          });
-        });
-      } catch (e) { console.error("Test notif failed", e); }
-    } else if (result === 'denied') {
-      toast('Notifications blocked.');
-    }
-    updateNotifyButton();
-  });
-
   function maybeNotify(m, key) {
-    if (!settings.notify) return;
-    if (!('Notification' in window)) return;
-    if (Notification.permission !== 'granted') return;
     if (m.mine) return;
     if (document.visibilityState === 'visible') return;
     if (m.ts < listenStart - 2000) return;
     if (notified.has(key)) return;
     notified.add(key);
-    
-    try {
-      const preview = m.text.length > 140 ? m.text.slice(0, 140) + '…' : m.text;
-      const roomLabel = room.type === 'dm' ? 'Private message' : '/public';
-      
-      navigator.serviceWorker.ready.then((reg) => {
-        reg.showNotification(`${m.nick} · ${roomLabel}`, {
-          body: preview, 
-          icon: NOTIF_ICON, 
-          tag: `ac-${key}`,
-          data: { room: room }
-        });
-      });
-      
-      unreadCount += 1;
-      updateTitle();
-    } catch (e) { console.error("Notification error", e); }
+    unreadCount += 1;
+    updateTitle();
   }
 
   // ---------- Mobile keyboard ----------
